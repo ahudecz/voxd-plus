@@ -9,6 +9,7 @@ typing_chunk_size: 250  # Characters per chunk (prevents ydotool 285-char trunca
 typing_inter_chunk_delay: 0.05  # Seconds between chunks (0.05 = 50ms)
 ctrl_v_paste: false  # Use Ctrl+V instead of default Ctrl+Shift+V
 append_trailing_space: true
+copy_to_clipboard: true
 verbosity: false
 autostart: false
 record_chunked: true

@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
     "typing_inter_chunk_delay": 0.05,  # Seconds between chunks (0.05 = 50ms)
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
     "append_trailing_space": True,
+    "copy_to_clipboard": True,
     "verbosity": False,
     "autostart": False,
     "save_recordings": False,
