@@ -15,10 +15,12 @@ import psutil
 
 class StreamingCoreProcessThread(QThread):
     """Core process thread that orchestrates streaming recording, transcription, and typing."""
-    
+
     finished = pyqtSignal(str)
     status_changed = pyqtSignal(str)
-    
+    recording_started = pyqtSignal()  # Signal for overlay integration
+    recording_stopped = pyqtSignal()  # Signal for overlay integration
+
     def __init__(self, cfg, logger):
         super().__init__()
         self.cfg = cfg
@@ -77,10 +79,18 @@ class StreamingCoreProcessThread(QThread):
         
         recorder = AudioRecorder()
         self.recorder = recorder
-        
+
         rec_start_dt = datetime.now()
         chunk_seconds = self.cfg.data.get("streaming_chunk_seconds", 3.0)
-        
+
+        # Play start audio cue if enabled
+        if self.cfg.data.get("audio_cues_enabled", True):
+            try:
+                from voxd.overlay.audio_cues import AudioCue
+                AudioCue.play_start()
+            except Exception:
+                pass
+
         self.status_changed.emit("Recording")
         
         def on_audio_chunk(audio_data: np.ndarray):
@@ -91,14 +101,24 @@ class StreamingCoreProcessThread(QThread):
         
         recorder.start_streaming_recording(on_audio_chunk, chunk_seconds=chunk_seconds)
         transcriber.start(samplerate=recorder.fs, channels=recorder.channels)
-        
+        self.recording_started.emit()  # Signal for overlay
+
         verbo("[streaming_core] Started streaming recording and transcription")
         while not self.should_stop:
             self.msleep(100)
-        
+
         rec_end_dt = datetime.now()
-        
+
+        # Play stop audio cue if enabled
+        if self.cfg.data.get("audio_cues_enabled", True):
+            try:
+                from voxd.overlay.audio_cues import AudioCue
+                AudioCue.play_stop()
+            except Exception:
+                pass
+
         self.status_changed.emit("Transcribing")
+        self.recording_stopped.emit()  # Signal for overlay
         recorder.stop_recording(preserve=False)
         transcriber.stop()
         
@@ -183,7 +203,15 @@ class StreamingCoreProcessThread(QThread):
                 "total_dur": (trans_end_ts - trans_start_ts) + (rec_end_dt - rec_start_dt).total_seconds()
             }
             write_perf_entry(perf_entry)
-        
+
+        # Play success audio cue if enabled
+        if self.cfg.data.get("audio_cue_on_success", False) and processed_text:
+            try:
+                from voxd.overlay.audio_cues import AudioCue
+                AudioCue.play_success()
+            except Exception:
+                pass
+
         self.finished.emit(processed_text)
     
     def _on_partial_text(self, text: str):

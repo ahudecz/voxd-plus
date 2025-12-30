@@ -19,6 +19,7 @@ from voxd.core.streaming_core import StreamingCoreProcessThread
 from voxd.core.model_manager import show_model_manager
 from voxd.gui.settings_dialog import SettingsDialog
 from voxd.utils.performance import update_last_perf_entry
+from voxd.overlay import get_overlay_manager
 
 ASSETS_DIR = (Path(__file__).resolve().parent / ".." / "assets").resolve()
 
@@ -615,6 +616,14 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
             self.runner_thread = CoreProcessThread(self.cfg, self.logger)
         self.runner_thread.status_changed.connect(self.set_status)
         self.runner_thread.finished.connect(self.on_transcript_ready)
+
+        # Connect overlay signals if overlay is enabled
+        if self.cfg.data.get("overlay_enabled", True):
+            overlay = get_overlay_manager()
+            self.runner_thread.recording_started.connect(overlay.show_recording)
+            self.runner_thread.recording_stopped.connect(overlay.show_processing)
+            self.runner_thread.finished.connect(lambda _: overlay.hide())
+
         self.runner_thread.start()
 
     def on_transcript_ready(self, tscript):

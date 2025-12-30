@@ -32,6 +32,10 @@ DEFAULT_CONFIG = {
     "streaming_emit_word_count": 3,
     "streaming_typing_delay": 0.01,
     "streaming_min_chars_to_type": 3,
+    # Overlay and audio cues
+    "overlay_enabled": True,  # Show waveform overlay during recording
+    "audio_cues_enabled": True,  # Play audio cues on start/stop
+    "audio_cue_on_success": False,  # Play success chime after transcription
     "verbosity": False,
     "autostart": False,
     "save_recordings": False,

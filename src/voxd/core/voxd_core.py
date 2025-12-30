@@ -15,7 +15,9 @@ from voxd.utils.languages import search_languages, code_to_name, normalize_lang_
 class CoreProcessThread(QThread):
     finished = pyqtSignal(str)
     status_changed = pyqtSignal(str)
-    
+    recording_started = pyqtSignal()  # Signal for overlay integration
+    recording_stopped = pyqtSignal()  # Signal for overlay integration
+
     def __init__(self, cfg, logger):
         super().__init__()
         self.cfg = cfg
@@ -32,6 +34,14 @@ class CoreProcessThread(QThread):
         from time import time
         from datetime import datetime
         import psutil
+
+        # Play start audio cue if enabled
+        if self.cfg.data.get("audio_cues_enabled", True):
+            try:
+                from voxd.overlay.audio_cues import AudioCue
+                AudioCue.play_start()
+            except Exception:
+                pass
 
         recorder = AudioRecorder()
 
@@ -62,11 +72,21 @@ class CoreProcessThread(QThread):
         # ── Recording ---------------------------------------------------
         rec_start_dt = datetime.now()
         recorder.start_recording()
+        self.recording_started.emit()  # Signal for overlay
         while not self.should_stop:
             self.msleep(100)
         rec_end_dt = datetime.now()
 
+        # Play stop audio cue if enabled
+        if self.cfg.data.get("audio_cues_enabled", True):
+            try:
+                from voxd.overlay.audio_cues import AudioCue
+                AudioCue.play_stop()
+            except Exception:
+                pass
+
         self.status_changed.emit("Transcribing")
+        self.recording_stopped.emit()  # Signal for overlay
         rec_path = recorder.stop_recording(preserve=False)
 
         # ── Transcription ----------------------------------------------
@@ -148,6 +168,14 @@ class CoreProcessThread(QThread):
                 "total_dur": (trans_end_ts - trans_start_ts) + (rec_end_dt - rec_start_dt).total_seconds()
             }
             write_perf_entry(perf_entry)
+
+        # Play success audio cue if enabled
+        if self.cfg.data.get("audio_cue_on_success", False) and final_text:
+            try:
+                from voxd.overlay.audio_cues import AudioCue
+                AudioCue.play_success()
+            except Exception:
+                pass
 
         self.finished.emit(final_text)
 

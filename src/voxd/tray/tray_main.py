@@ -22,6 +22,7 @@ from voxd.core.streaming_core import StreamingCoreProcessThread
 from voxd.core.model_manager import show_model_manager  # NEW
 from voxd.utils.performance import update_last_perf_entry
 from voxd.gui.settings_dialog import SettingsDialog
+from voxd.overlay import get_overlay_manager
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Icon resources & animation frames
@@ -139,6 +140,14 @@ class VoxdTrayApp(QObject):
             self.thread = CoreProcessThread(self.cfg, self.logger)
         self.thread.status_changed.connect(self.set_status, Qt.ConnectionType.QueuedConnection)
         self.thread.finished.connect(self.on_transcript_ready)
+
+        # Connect overlay signals if overlay is enabled
+        if self.cfg.data.get("overlay_enabled", True):
+            overlay = get_overlay_manager()
+            self.thread.recording_started.connect(overlay.show_recording)
+            self.thread.recording_stopped.connect(overlay.show_processing)
+            self.thread.finished.connect(lambda _: overlay.hide())
+
         self.thread.start()
 
     def on_transcript_ready(self, tscript):

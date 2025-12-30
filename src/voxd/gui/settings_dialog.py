@@ -81,6 +81,15 @@ class SettingsDialog(QDialog):
         self._add_checkbox(form, "copy_to_clipboard", "Copy transcription to clipboard")
 
         # ------------------------------------------------------------------
+        #  Overlay & Audio Cues
+        # ------------------------------------------------------------------
+        form.addRow(self._section_label("Overlay & Audio Cues"), QLabel(""))
+
+        self._add_checkbox(form, "overlay_enabled", "Show waveform overlay")
+        self._add_checkbox(form, "audio_cues_enabled", "Play audio cues on start/stop")
+        self._add_checkbox(form, "audio_cue_on_success", "Play success sound after transcription")
+
+        # ------------------------------------------------------------------
         #  Logging & Performance
         # ------------------------------------------------------------------
         form.addRow(self._section_label("Logging / Performance"), QLabel(""))
