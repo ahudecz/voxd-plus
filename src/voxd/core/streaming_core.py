@@ -3,6 +3,7 @@ from PyQt6.QtCore import QThread, pyqtSignal  # type: ignore
 from voxd.core.streaming_transcriber import StreamingWhisperTranscriber
 from voxd.core.recorder import AudioRecorder
 from voxd.core.typer import SimulatedTyper
+from voxd.core.clipboard import ClipboardManager
 from voxd.core.aipp import get_final_text
 from voxd.utils.libw import verbo, verr
 from voxd.utils.whisper_auto import ensure_whisper_cli
@@ -148,7 +149,17 @@ class StreamingCoreProcessThread(QThread):
                 self.logger.log_entry(processed_text)
         except Exception:
             pass
-        
+
+        # Copy to clipboard if enabled
+        copy_enabled = self.cfg.data.get("copy_to_clipboard", True)
+        if copy_enabled and processed_text:
+            try:
+                clipboard = ClipboardManager()
+                clipboard.copy(processed_text)
+                verbo(f"[streaming_core] Copied to clipboard: {len(processed_text)} chars")
+            except Exception as e:
+                verr(f"[streaming_core] Clipboard copy failed: {e}")
+
         # In streaming mode, text is already typed incrementally during recording
         # Only type final text if AIPP changed it and there's a difference
         if self.cfg.typing and processed_text:

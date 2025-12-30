@@ -234,7 +234,7 @@ class StreamingWhisperTranscriber:
     
     def _process_transcript(self, new_text: str, chunk_id: str = "", chunk_time: float = 0.0):
         """Process new transcript and emit incremental updates.
-        
+
         Args:
             new_text: The transcribed text
             chunk_id: Unique identifier for this chunk
@@ -242,22 +242,23 @@ class StreamingWhisperTranscriber:
         """
         if not new_text or not new_text.strip():
             return
-        
+
         new_text = new_text.strip()
-        
+
         # Skip if this text is already fully contained in accumulated text
         if self.accumulated_text and new_text in self.accumulated_text:
             verbo(f"[streaming_transcriber] Skipping duplicate transcript (already in accumulated): '{new_text[:50]}...'")
             return
-        
+
         verbo(f"[streaming_transcriber] Processing transcript: '{new_text[:50]}...', accumulated: '{self.accumulated_text[:50] if self.accumulated_text else ''}...'")
-        
+
         if self.accumulated_text:
             accumulated_clean = self.accumulated_text.strip()
-            
+
             if new_text == accumulated_clean:
                 return
-            
+
+            # Case 1: New text is an extension of accumulated (ideal case)
             if new_text.startswith(accumulated_clean):
                 suffix = new_text[len(accumulated_clean):].strip()
                 if suffix:
@@ -268,43 +269,46 @@ class StreamingWhisperTranscriber:
                         if self.on_partial_text:
                             self.on_partial_text(suffix)
                         self._update_emission_state(new_text)
+                return
+
+            # Case 2: Look for overlap at END of accumulated matching BEGINNING of new_text
+            # This handles independent chunk transcriptions with audio overlap
+            words_accumulated = accumulated_clean.split()
+            words_new = new_text.split()
+
+            # Find longest suffix of accumulated that matches prefix of new
+            overlap_words = 0
+            max_overlap_check = min(len(words_accumulated), len(words_new), 10)  # Limit overlap search
+
+            for overlap_len in range(1, max_overlap_check + 1):
+                # Check if last overlap_len words of accumulated match first overlap_len words of new
+                suffix_words = words_accumulated[-overlap_len:]
+                prefix_words = words_new[:overlap_len]
+                if suffix_words == prefix_words:
+                    overlap_words = overlap_len
+
+            if overlap_words > 0:
+                # Found overlap - append only the non-overlapping portion
+                non_overlapping = words_new[overlap_words:]
+                if non_overlapping:
+                    diff_text = " ".join(non_overlapping)
+                    diff_text = self._ensure_space_before(accumulated_clean, diff_text)
+                    self.accumulated_text = accumulated_clean + " " + diff_text.lstrip()
+                    if self._should_emit_text(self.accumulated_text):
+                        verbo(f"[streaming_transcriber] Found {overlap_words} overlapping words, emitting: '{diff_text[:50]}...'")
+                        if self.on_partial_text:
+                            self.on_partial_text(diff_text)
+                        self._update_emission_state(self.accumulated_text)
             else:
-                words_accumulated = accumulated_clean.split()
-                words_new = new_text.split()
-                
-                common_prefix_len = 0
-                for i in range(min(len(words_accumulated), len(words_new))):
-                    if words_accumulated[i] == words_new[i]:
-                        common_prefix_len += 1
-                    else:
-                        break
-                
-                if common_prefix_len > 0 and common_prefix_len < len(words_accumulated):
-                    # Transcription changed for part of the text - just continue with new text
-                    # (We don't rewrite because it's complex and error-prone)
-                    diff_text = " ".join(words_new[common_prefix_len:]) if common_prefix_len < len(words_new) else ""
-                    if diff_text:
-                        diff_text = self._ensure_space_before(" ".join(words_accumulated[:common_prefix_len]), diff_text)
-                        self.accumulated_text = new_text
-                        if self._should_emit_text(new_text):
-                            verbo(f"[streaming_transcriber] Transcription changed (common prefix: {common_prefix_len} words), emitting diff: '{diff_text[:50]}...'")
-                            if self.on_partial_text:
-                                self.on_partial_text(diff_text)
-                            self._update_emission_state(new_text)
-                    else:
-                        self.accumulated_text = new_text
-                else:
-                    diff_text = " ".join(words_new[common_prefix_len:]) if common_prefix_len < len(words_new) else new_text
-                    if diff_text:
-                        diff_text = self._ensure_space_before(accumulated_clean, diff_text)
-                        self.accumulated_text = new_text
-                        if self._should_emit_text(new_text):
-                            verbo(f"[streaming_transcriber] Emitting diff: '{diff_text[:50]}...'")
-                            if self.on_partial_text:
-                                self.on_partial_text(diff_text)
-                            self._update_emission_state(new_text)
-                    else:
-                        self.accumulated_text = new_text
+                # No overlap found - this is a new independent chunk, APPEND it
+                # (Previously this overwrote accumulated_text, causing lost text)
+                diff_text = self._ensure_space_before(accumulated_clean, new_text)
+                self.accumulated_text = accumulated_clean + diff_text
+                if self._should_emit_text(self.accumulated_text):
+                    verbo(f"[streaming_transcriber] No overlap found, appending: '{new_text[:50]}...'")
+                    if self.on_partial_text:
+                        self.on_partial_text(diff_text)
+                    self._update_emission_state(self.accumulated_text)
         else:
             self.accumulated_text = new_text
             if self._should_emit_text(new_text):
