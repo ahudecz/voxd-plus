@@ -280,9 +280,14 @@ def show_options_dialog(parent, logger, cfg=None, modal=True, hide_aipp=False):
     dialog.finished.connect(lambda _=None: cfg.save())
 
     if modal:
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
         dialog.exec()
     else:
         dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
     return dialog
 
 def show_config_editor(parent, config_path, after_save_cb=None):
@@ -351,9 +356,10 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
 
     dlg = QDialog(parent)
     dlg.setWindowTitle("Manage AIPP Prompts")
-    dlg.setMinimumWidth(300)
+    dlg.setMinimumWidth(500)
 
-    grid = QGridLayout(dlg)
+    main_layout = QVBoxLayout(dlg)
+    grid = QGridLayout()
 
     radio_buttons = []
     text_edits = []
@@ -364,15 +370,25 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
         radio_buttons.append(rb)
 
         te = QTextEdit(prompts.get(key, ""))
+        te.setMinimumHeight(60)
         text_edits.append(te)
 
         grid.addWidget(rb, i, 0)
         grid.addWidget(QLabel(key), i, 1)
         grid.addWidget(te, i, 2)
 
+    # Set column stretch so text edits get most space
+    grid.setColumnStretch(2, 1)
+
+    main_layout.addLayout(grid)
+
     button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save |
                                   QDialogButtonBox.StandardButton.Cancel)
-    grid.addWidget(button_box, len(prompt_keys), 0, 1, 3)
+    # Ensure buttons have proper minimum size for clickability
+    for btn in button_box.buttons():
+        btn.setMinimumWidth(80)
+        btn.setMinimumHeight(30)
+    main_layout.addWidget(button_box)
 
     # ------------------------------------------------------------------
     # Button actions
@@ -414,9 +430,15 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
     button_box.rejected.connect(_cancel)
 
     if modal:
+        # Ensure dialog is visible and raised (fixes issues with nested modal dialogs)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
         dlg.exec()
     else:
         dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     return dlg
 
@@ -640,9 +662,14 @@ def show_language_dialog(parent, cfg, modal=True):
     cancel_btn.clicked.connect(dlg.reject)
 
     if modal:
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
         dlg.exec()
     else:
         dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
     return dlg
 
 # ----------------------------------------------------------------------------
@@ -734,7 +761,11 @@ def show_aipp_dialog(parent, cfg, modal=True):
     manage_btn = QPushButton("Manage prompts")
 
     def _open_manage_prompts():
-        show_manage_prompts(dlg, cfg, after_save_cb=lambda: prompt_label.setText(cfg.data.get("aipp_active_prompt", "default")))
+        try:
+            show_manage_prompts(dlg, cfg, after_save_cb=lambda: prompt_label.setText(cfg.data.get("aipp_active_prompt", "default")))
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(dlg, "Error", f"Failed to open prompt manager:\n{e}")
 
     manage_btn.clicked.connect(_open_manage_prompts)
     manage_btn_row.addWidget(manage_btn)
@@ -746,9 +777,14 @@ def show_aipp_dialog(parent, cfg, modal=True):
     dlg.finished.connect(lambda _=None: cfg.save())
 
     if modal:
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
         dlg.exec()
     else:
         dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     return dlg
 
