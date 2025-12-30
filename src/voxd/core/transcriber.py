@@ -74,39 +74,22 @@ class WhisperTranscriber:
             "-otxt"  # <-- THIS is necessary to actually generate the .txt file
         ]
 
-        # Add GPU device flag if using CUDA
-        if self.device == "cuda":
-            # Check if whisper-cli supports --gpu flag (newer versions)
-            cmd.extend(["--gpu", "0"])  # Use GPU device 0 by default
-            if self.cfg:
-                gpu_id = self.cfg.data.get("gpu_device_id", 0)
-                cmd[-1] = str(gpu_id)
+        # GPU handling: new whisper.cpp has GPU on by default, use --no-gpu to disable
+        if self.device == "cpu":
+            cmd.append("--no-gpu")
 
         verbo(f"[transcriber] Running command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
 
-        # If GPU failed, try falling back to CPU
-        # Note: whisper-cli may return 0 even on "unknown argument" errors, so check stderr too
-        gpu_failed = (result.returncode != 0 or
-                      "unknown argument" in result.stderr.lower() or
-                      "error:" in result.stderr.lower().split('\n')[0] if result.stderr else False)
+        # If GPU failed (CUDA errors), try falling back to CPU
+        gpu_error_indicators = ["cuda", "gpu", "device", "out of memory"]
+        has_gpu_error = any(indicator in result.stderr.lower() for indicator in gpu_error_indicators) if result.stderr else False
 
-        if gpu_failed and self.device == "cuda":
+        if result.returncode != 0 and self.device == "cuda" and has_gpu_error:
             verr("[transcriber] GPU transcription failed, falling back to CPU...")
-            # Remove GPU flags and retry
-            cmd_cpu_clean = []
-            skip_next = False
-            for arg in cmd:
-                if skip_next:
-                    skip_next = False
-                    continue
-                if arg == "--gpu":
-                    skip_next = True
-                    continue
-                cmd_cpu_clean.append(arg)
-
-            verbo(f"[transcriber] Retrying with CPU: {' '.join(cmd_cpu_clean)}")
-            result = subprocess.run(cmd_cpu_clean, capture_output=True, text=True)
+            cmd_cpu = cmd + ["--no-gpu"]
+            verbo(f"[transcriber] Retrying with CPU: {' '.join(cmd_cpu)}")
+            result = subprocess.run(cmd_cpu, capture_output=True, text=True)
 
         if result.returncode != 0:
             verr("[transcriber] whisper.cpp failed:")
