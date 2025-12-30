@@ -132,7 +132,7 @@ class RecordingOverlay(QWidget):
 
     def _setup_ui(self):
         """Build the UI"""
-        self.setFixedSize(320, 130)
+        self.setFixedSize(640, 320)
 
         # Main container with rounded corners
         main_layout = QVBoxLayout(self)
@@ -204,7 +204,7 @@ class RecordingOverlay(QWidget):
 
         # Waveform display
         self.waveform = WaveformWidget()
-        self.waveform.setFixedHeight(60)
+        self.waveform.setFixedHeight(240)
         container_layout.addWidget(self.waveform)
 
         # Bottom row: hint
