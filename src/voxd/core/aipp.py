@@ -203,28 +203,37 @@ def run_llamacpp_server_aipp(prompt: str, model: str = "gemma-3-270m") -> str:
     """Use llama.cpp server API (OpenAI-compatible)."""
     from voxd.core.config import get_config
     from voxd.core.llama_server_manager import ensure_server_running
-    
+
     cfg = get_config()
     url = cfg.data.get("llamacpp_server_url", "http://localhost:8080")
     timeout = cfg.data.get("llamacpp_server_timeout", 30)
-    
+
     # Ensure server is running before making API calls
     server_path = cfg.data.get("llamacpp_server_path", "")
     model_path = cfg.get_llamacpp_model_path(model)
-    
+
     if not ensure_server_running(server_path, model_path):
-        raise RuntimeError("Failed to start llama-server")
-    
-    response = requests.post(f"{url}/v1/chat/completions", json={
-        "model": model,  # Model name is mostly ignored by llama.cpp server
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": False,
-        "max_tokens": 512,
-        "temperature": 0.7
-    }, timeout=timeout)
-    
+        raise RuntimeError("Failed to start llama-server. Check llamacpp_server_path in settings.")
+
+    try:
+        response = requests.post(f"{url}/v1/chat/completions", json={
+            "model": model,  # Model name is mostly ignored by llama.cpp server
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "max_tokens": 512,
+            "temperature": 0.7
+        }, timeout=timeout)
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError(f"Cannot connect to llama.cpp server at {url}. Is it running?")
+
     if response.ok:
-        return response.json()["choices"][0]["message"]["content"].strip()
+        data = response.json()
+        if "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"].strip()
+        elif "detail" in data:
+            raise RuntimeError(f"llama.cpp server error: {data['detail']}")
+        else:
+            raise RuntimeError(f"Unexpected response from llama.cpp server: {data}")
     else:
         raise requests.RequestException(f"llama.cpp server error {response.status_code}: {response.text}")
 
@@ -240,8 +249,13 @@ def get_final_text(transcript: str, cfg) -> str:
     if not cfg.data.get("aipp_enabled", False):
         return transcript
     prompt_key = cfg.data.get("aipp_active_prompt", "default")
+    provider = cfg.data.get("aipp_provider", "local")
     try:
         return run_aipp(transcript, cfg, prompt_key=prompt_key)
+    except KeyError as e:
+        # API returned unexpected response structure (e.g. error with "detail" field)
+        verr(f"[aipp] {provider} returned an error response (missing key: {e}). Is the server running?")
+        return transcript
     except Exception as e:
-        verr(f"[aipp] Error: {e}")
+        verr(f"[aipp] Error with {provider}: {e}")
         return transcript
