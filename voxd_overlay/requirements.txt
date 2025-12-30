@@ -1,0 +1,6 @@
+# Recording Overlay Dependencies
+# These are the same as voxd uses, so likely already installed
+
+PyQt6>=6.4.0
+numpy>=1.20.0
+sounddevice>=0.4.0
