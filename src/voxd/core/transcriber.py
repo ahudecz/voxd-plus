@@ -8,7 +8,7 @@ from voxd.utils.languages import normalize_lang_code, is_valid_lang
 
 
 class WhisperTranscriber:
-    def __init__(self, model_path, binary_path, delete_input=True, language: str | None = None):
+    def __init__(self, model_path, binary_path, delete_input=True, language: str | None = None, cfg=None):
         # --- Model path: try config, else auto-discover ---
         if model_path and Path(model_path).is_file():
             self.model_path = model_path
@@ -25,6 +25,7 @@ class WhisperTranscriber:
             verbo(f"[transcriber] Falling back to auto-detected whisper-cli: {self.binary_path}")
 
         self.delete_input = delete_input
+        self.cfg = cfg
         from voxd.paths import OUTPUT_DIR
         self.output_dir = OUTPUT_DIR
 
@@ -35,6 +36,10 @@ class WhisperTranscriber:
             lang = "en"
         self.language = lang
 
+        # Determine GPU device
+        self.device = self._get_device()
+        verbo(f"[transcriber] Using device: {self.device}")
+
         # Warn if likely mismatch with an English-only model
         try:
             mp = str(self.model_path).lower()
@@ -42,6 +47,14 @@ class WhisperTranscriber:
                 verr("[transcriber] Non-English language selected but an English-only (*.en) model is configured.")
         except Exception:
             pass
+
+    def _get_device(self) -> str:
+        """Determine the device to use for transcription."""
+        try:
+            from voxd.utils.gpu_detect import get_whisper_device_flag
+            return get_whisper_device_flag(self.cfg)
+        except ImportError:
+            return "cpu"
 
     def transcribe(self, audio_path):
         audio_file = Path(audio_path)
@@ -61,8 +74,37 @@ class WhisperTranscriber:
             "-otxt"  # <-- THIS is necessary to actually generate the .txt file
         ]
 
+        # Add GPU device flag if using CUDA
+        if self.device == "cuda":
+            # Check if whisper-cli supports --gpu flag (newer versions)
+            cmd.extend(["--gpu", "0"])  # Use GPU device 0 by default
+            if self.cfg:
+                gpu_id = self.cfg.data.get("gpu_device_id", 0)
+                cmd[-1] = str(gpu_id)
+
         verbo(f"[transcriber] Running command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
+
+        # If GPU failed, try falling back to CPU
+        if result.returncode != 0 and self.device == "cuda":
+            verr("[transcriber] GPU transcription failed, falling back to CPU...")
+            # Remove GPU flags and retry
+            cmd_cpu = [arg for arg in cmd if arg not in ["--gpu"] and not arg.isdigit()]
+            # Also filter out the GPU device ID that follows --gpu
+            cmd_cpu_clean = []
+            skip_next = False
+            for i, arg in enumerate(cmd):
+                if skip_next:
+                    skip_next = False
+                    continue
+                if arg == "--gpu":
+                    skip_next = True
+                    continue
+                cmd_cpu_clean.append(arg)
+
+            verbo(f"[transcriber] Retrying with CPU: {' '.join(cmd_cpu_clean)}")
+            result = subprocess.run(cmd_cpu_clean, capture_output=True, text=True)
+
         if result.returncode != 0:
             verr("[transcriber] whisper.cpp failed:")
             verr(f"stderr: {result.stderr}")

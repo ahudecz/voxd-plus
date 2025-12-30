@@ -255,8 +255,13 @@ class SimulatedTyper:
             print("[typer] ⚠️ Typing disabled - required tool not available.")
             return
 
-        # If delay ≤ 0, or typing tool is missing, use fast clipboard paste instead of typing
-        if self.delay_ms <= 0 or not self.tool:
+        # Check typing method preference (default: clipboard for Unicode/layout compatibility)
+        typing_method = "clipboard"
+        if self.cfg:
+            typing_method = self.cfg.data.get("typing_method", "clipboard")
+
+        # If clipboard method selected, or delay ≤ 0, or typing tool is missing, use clipboard paste
+        if typing_method == "clipboard" or self.delay_ms <= 0 or not self.tool:
             self._paste(text)
             return
 

@@ -39,7 +39,7 @@ class CoreProcessThread(QThread):
         if self.cfg.data.get("audio_cues_enabled", True):
             try:
                 from voxd.overlay.audio_cues import AudioCue
-                AudioCue.play_start()
+                AudioCue.play_start(self.cfg)
             except Exception:
                 pass
 
@@ -53,6 +53,7 @@ class CoreProcessThread(QThread):
                 model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
                 language=getattr(self.cfg, "language", "en"),
+                cfg=self.cfg,
             )
         except FileNotFoundError:
             # Try to build on the fly (GUI prompt)
@@ -65,6 +66,7 @@ class CoreProcessThread(QThread):
                 model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
                 language=getattr(self.cfg, "language", "en"),
+                cfg=self.cfg,
             )
         typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay, cfg=self.cfg)
         clipboard = ClipboardManager()
@@ -81,7 +83,7 @@ class CoreProcessThread(QThread):
         if self.cfg.data.get("audio_cues_enabled", True):
             try:
                 from voxd.overlay.audio_cues import AudioCue
-                AudioCue.play_stop()
+                AudioCue.play_stop(self.cfg)
             except Exception:
                 pass
 
@@ -173,7 +175,7 @@ class CoreProcessThread(QThread):
         if self.cfg.data.get("audio_cue_on_success", False) and final_text:
             try:
                 from voxd.overlay.audio_cues import AudioCue
-                AudioCue.play_success()
+                AudioCue.play_success(self.cfg)
             except Exception:
                 pass
 

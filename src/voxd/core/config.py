@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     "typing_start_delay": 0.15,
     "typing_chunk_size": 250,  # Characters per chunk for long text (prevents ydotool truncation at 285)
     "typing_inter_chunk_delay": 0.05,  # Seconds between chunks (0.05 = 50ms)
+    "typing_method": "clipboard",  # "clipboard" (default) or "direct" - clipboard bypasses keyboard layout issues
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
     "append_trailing_space": True,
     "copy_to_clipboard": True,
@@ -36,6 +37,12 @@ DEFAULT_CONFIG = {
     "overlay_enabled": True,  # Show waveform overlay during recording
     "audio_cues_enabled": True,  # Play audio cues on start/stop
     "audio_cue_on_success": False,  # Play success chime after transcription
+    "audio_cue_volume": 0.3,  # Volume level 0.0-1.0
+    "audio_cue_use_custom": False,  # Use custom audio files instead of synthesized tones
+    "audio_cue_start_file": "",  # Path to custom start sound (WAV)
+    "audio_cue_stop_file": "",  # Path to custom stop sound (WAV)
+    "audio_cue_success_file": "",  # Path to custom success sound (WAV)
+    "audio_cue_error_file": "",  # Path to custom error sound (WAV)
     "verbosity": False,
     "autostart": False,
     "save_recordings": False,
@@ -55,6 +62,10 @@ DEFAULT_CONFIG = {
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "whisper_model_path": "whisper.cpp/models/ggml-base.en.bin",
     "language": "en",
+    # GPU settings
+    "gpu_enabled": True,  # Enable GPU acceleration if available
+    "gpu_device": "auto",  # "auto", "cpu", or "cuda"
+    "gpu_device_id": 0,  # GPU device index for multi-GPU systems
 
     # --- Flux (VAD-driven continuous dictation) ------------------------------
     # Defaults are conservative and CPU-light; Flux VAD is built-in

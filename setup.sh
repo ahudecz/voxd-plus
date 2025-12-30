@@ -811,7 +811,23 @@ if [[ -z "$WHISPER_BIN" ]]; then
   fi
   if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
       msg "Building whisper.cpp (this may take a while)…"
-      cmake -S whisper.cpp -B whisper.cpp/build -DBUILD_SHARED_LIBS=OFF
+
+      # Detect CUDA availability for GPU acceleration
+      CMAKE_CUDA_FLAGS=""
+      if command -v nvidia-smi &>/dev/null && nvidia-smi -L 2>/dev/null | grep -q "GPU"; then
+          msg "NVIDIA GPU detected - checking for CUDA toolkit…"
+          if command -v nvcc &>/dev/null; then
+              msg "${GREEN}CUDA toolkit found - building with GPU support${NC}"
+              CMAKE_CUDA_FLAGS="-DGGML_CUDA=ON"
+          else
+              msg "${YELLOW}CUDA toolkit not found - building CPU-only version${NC}"
+              msg "To enable GPU support, install CUDA toolkit and re-run setup.sh"
+          fi
+      else
+          msg "No NVIDIA GPU detected - building CPU-only version"
+      fi
+
+      cmake -S whisper.cpp -B whisper.cpp/build -DBUILD_SHARED_LIBS=OFF $CMAKE_CUDA_FLAGS
       cmake --build whisper.cpp/build -j"$(nproc)"
   else
       msg "whisper.cpp already built."

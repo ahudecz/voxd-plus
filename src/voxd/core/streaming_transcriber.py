@@ -30,12 +30,14 @@ class StreamingWhisperTranscriber:
         emit_word_count: int = 3,
         on_partial_text: Optional[Callable[[str], None]] = None,
         on_final_text: Optional[Callable[[str], None]] = None,
+        cfg=None,
     ):
         self.transcriber = WhisperTranscriber(
             model_path=model_path,
             binary_path=binary_path,
             delete_input=True,
             language=language,
+            cfg=cfg,
         )
         self.chunk_seconds = chunk_seconds
         self.overlap_seconds = overlap_seconds

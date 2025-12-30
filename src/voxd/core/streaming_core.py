@@ -52,6 +52,7 @@ class StreamingCoreProcessThread(QThread):
                 emit_word_count=self.cfg.data.get("streaming_emit_word_count", 3),
                 on_partial_text=self._on_partial_text,
                 on_final_text=self._on_final_text,
+                cfg=self.cfg,
             )
         except FileNotFoundError:
             if ensure_whisper_cli("gui") is None:
@@ -68,6 +69,7 @@ class StreamingCoreProcessThread(QThread):
                 emit_word_count=self.cfg.data.get("streaming_emit_word_count", 3),
                 on_partial_text=self._on_partial_text,
                 on_final_text=self._on_final_text,
+                cfg=self.cfg,
             )
         
         self.transcriber = transcriber
@@ -87,7 +89,7 @@ class StreamingCoreProcessThread(QThread):
         if self.cfg.data.get("audio_cues_enabled", True):
             try:
                 from voxd.overlay.audio_cues import AudioCue
-                AudioCue.play_start()
+                AudioCue.play_start(self.cfg)
             except Exception:
                 pass
 
@@ -113,7 +115,7 @@ class StreamingCoreProcessThread(QThread):
         if self.cfg.data.get("audio_cues_enabled", True):
             try:
                 from voxd.overlay.audio_cues import AudioCue
-                AudioCue.play_stop()
+                AudioCue.play_stop(self.cfg)
             except Exception:
                 pass
 
@@ -208,7 +210,7 @@ class StreamingCoreProcessThread(QThread):
         if self.cfg.data.get("audio_cue_on_success", False) and processed_text:
             try:
                 from voxd.overlay.audio_cues import AudioCue
-                AudioCue.play_success()
+                AudioCue.play_success(self.cfg)
             except Exception:
                 pass
 

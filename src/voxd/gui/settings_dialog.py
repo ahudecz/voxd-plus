@@ -74,6 +74,14 @@ class SettingsDialog(QDialog):
         form.addRow(self._section_label("General"), QLabel(""))
 
         self._add_checkbox(form, "typing", "Enable typing")
+
+        # Typing method dropdown
+        method_combo = QComboBox()
+        method_combo.addItems(["clipboard", "direct"])
+        method_combo.setCurrentText(self.cfg.data.get("typing_method", "clipboard"))
+        form.addRow("Typing method", method_combo)
+        self._widgets["typing_method"] = method_combo
+
         self._add_spin(form, "typing_delay", "Typing delay (ms)", 0, 1000)
         self._add_doublespin(form, "typing_start_delay", "Start delay (s)", 0, 5, step=0.05)
         self._add_checkbox(form, "ctrl_v_paste", "Use Ctrl+V paste")
@@ -88,6 +96,30 @@ class SettingsDialog(QDialog):
         self._add_checkbox(form, "overlay_enabled", "Show waveform overlay")
         self._add_checkbox(form, "audio_cues_enabled", "Play audio cues on start/stop")
         self._add_checkbox(form, "audio_cue_on_success", "Play success sound after transcription")
+
+        # Volume slider (0-100%)
+        volume_layout = QHBoxLayout()
+        volume_slider = QSpinBox()
+        volume_slider.setRange(0, 100)
+        volume_slider.setSuffix("%")
+        volume_slider.setValue(int(self.cfg.data.get("audio_cue_volume", 0.3) * 100))
+        volume_layout.addWidget(volume_slider)
+        # Test button
+        test_btn = QPushButton("Test")
+        test_btn.setFixedWidth(50)
+        test_btn.clicked.connect(lambda: self._test_audio_cue("start"))
+        volume_layout.addWidget(test_btn)
+        volume_widget = QWidget()
+        volume_widget.setLayout(volume_layout)
+        form.addRow("Volume", volume_widget)
+        self._widgets["audio_cue_volume"] = volume_slider
+
+        # Custom audio files
+        use_custom = self._add_checkbox(form, "audio_cue_use_custom", "Use custom sound files")
+        self._add_filepicker(form, "audio_cue_start_file", "Browse", filter="Audio (*.wav *.mp3 *.ogg)")
+        self._add_filepicker(form, "audio_cue_stop_file", "Browse", filter="Audio (*.wav *.mp3 *.ogg)")
+        self._add_filepicker(form, "audio_cue_success_file", "Browse", filter="Audio (*.wav *.mp3 *.ogg)")
+        self._add_filepicker(form, "audio_cue_error_file", "Browse", filter="Audio (*.wav *.mp3 *.ogg)")
 
         # ------------------------------------------------------------------
         #  Logging & Performance
@@ -303,6 +335,31 @@ class SettingsDialog(QDialog):
             idx = combo.findText(current)
             combo.setCurrentIndex(max(0, idx))
 
+    def _test_audio_cue(self, cue_type: str):
+        """Play a test audio cue with current volume setting"""
+        from voxd.overlay.audio_cues import AudioCue
+        # Create a temporary config-like object with current dialog values
+        volume_widget = self._widgets.get("audio_cue_volume")
+        if volume_widget:
+            volume = volume_widget.value() / 100.0
+        else:
+            volume = 0.3
+
+        # Build a mini config for testing
+        class TempCfg:
+            def __init__(self, data):
+                self.data = data
+
+        test_cfg = TempCfg({
+            "audio_cue_volume": volume,
+            "audio_cue_use_custom": self._widgets.get("audio_cue_use_custom", QPushButton()).isChecked() if isinstance(self._widgets.get("audio_cue_use_custom"), QAbstractButton) else False,
+            "audio_cue_start_file": self._widgets.get("audio_cue_start_file", QLabel()).text() if isinstance(self._widgets.get("audio_cue_start_file"), QLabel) else "",
+            "audio_cue_stop_file": self._widgets.get("audio_cue_stop_file", QLabel()).text() if isinstance(self._widgets.get("audio_cue_stop_file"), QLabel) else "",
+            "audio_cue_success_file": self._widgets.get("audio_cue_success_file", QLabel()).text() if isinstance(self._widgets.get("audio_cue_success_file"), QLabel) else "",
+            "audio_cue_error_file": self._widgets.get("audio_cue_error_file", QLabel()).text() if isinstance(self._widgets.get("audio_cue_error_file"), QLabel) else "",
+        })
+        AudioCue.test_cue(cue_type, test_cfg)
+
     # ──────────────────────────────────────────────────────────────────
     #  Save
     # ------------------------------------------------------------------
@@ -337,6 +394,10 @@ class SettingsDialog(QDialog):
                 self.cfg.data.setdefault("aipp_selected_models", {})[provider] = val
                 self.cfg.aipp_model = val  # type: ignore[attr-defined]
                 continue
+
+            # Convert volume percentage (0-100) to 0.0-1.0 range
+            if key == "audio_cue_volume":
+                val = val / 100.0
 
             self.cfg.data[key] = val
             if hasattr(self.cfg, key):
