@@ -86,14 +86,17 @@ class WhisperTranscriber:
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         # If GPU failed, try falling back to CPU
-        if result.returncode != 0 and self.device == "cuda":
+        # Note: whisper-cli may return 0 even on "unknown argument" errors, so check stderr too
+        gpu_failed = (result.returncode != 0 or
+                      "unknown argument" in result.stderr.lower() or
+                      "error:" in result.stderr.lower().split('\n')[0] if result.stderr else False)
+
+        if gpu_failed and self.device == "cuda":
             verr("[transcriber] GPU transcription failed, falling back to CPU...")
             # Remove GPU flags and retry
-            cmd_cpu = [arg for arg in cmd if arg not in ["--gpu"] and not arg.isdigit()]
-            # Also filter out the GPU device ID that follows --gpu
             cmd_cpu_clean = []
             skip_next = False
-            for i, arg in enumerate(cmd):
+            for arg in cmd:
                 if skip_next:
                     skip_next = False
                     continue
