@@ -309,13 +309,13 @@ class RecordingOverlayManager:
         if self._position:
             self._overlay.move(*self._position)
         else:
-            # Default: bottom right corner
+            # Default: center of screen
             screen = QApplication.primaryScreen()
             if screen:
                 geom = screen.geometry()
                 self._overlay.move(
-                    geom.width() - self._overlay.width() - 20,
-                    geom.height() - self._overlay.height() - 100
+                    (geom.width() - self._overlay.width()) // 2,
+                    (geom.height() - self._overlay.height()) // 2
                 )
 
         self._overlay.start_recording_display()
