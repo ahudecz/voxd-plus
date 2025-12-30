@@ -186,3 +186,13 @@ cython_debug/
 # any whisper.cpp build cache
 .whisper.cpp/
 **/whisper.cpp/build/
+
+# Claude Code local settings
+.claude/
+
+# Old development overlay (superseded by src/voxd/overlay/)
+voxd_overlay/
+
+# llama.cpp models (large binary files)
+llamacpp_models/
+*.gguf
