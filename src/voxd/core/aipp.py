@@ -37,6 +37,14 @@ def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
                 return run_anthropic_aipp(full_prompt, model)
             elif provider == "xai":
                 return run_xai_aipp(full_prompt, model)
+            elif provider == "gemini":
+                return run_gemini_aipp(full_prompt, model)
+            elif provider == "groq":
+                return run_groq_aipp(full_prompt, model)
+            elif provider == "openrouter":
+                return run_openrouter_aipp(full_prompt, model)
+            elif provider == "lmstudio":
+                return run_lmstudio_aipp(full_prompt, model)
             else:
                 verr(f"[aipp] Unsupported provider: {provider}")
                 return text
@@ -115,6 +123,80 @@ def run_xai_aipp(prompt: str, model: str = "grok-3") -> str:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:
         raise requests.RequestException(f"XAI error {response.status_code}: {response.text}")
+
+
+def run_gemini_aipp(prompt: str, model: str = "gemini-2.0-flash") -> str:
+    """Google Gemini API."""
+    api_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024}
+    }
+    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=20)
+    if response.ok:
+        data = response.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    else:
+        raise requests.RequestException(f"Gemini error {response.status_code}: {response.text}")
+
+
+def run_groq_aipp(prompt: str, model: str = "llama-3.3-70b-versatile") -> str:
+    """Groq API (OpenAI-compatible)."""
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {os.getenv('GROQ_API_KEY', '')}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7
+    }
+    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=20)
+    if response.ok:
+        return response.json()["choices"][0]["message"]["content"].strip()
+    else:
+        raise requests.RequestException(f"Groq error {response.status_code}: {response.text}")
+
+
+def run_openrouter_aipp(prompt: str, model: str = "google/gemini-2.0-flash-001") -> str:
+    """OpenRouter API (OpenAI-compatible with model routing)."""
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY', '')}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/rdoiron/voxd-plus",
+        "X-Title": "voxd-plus"
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7
+    }
+    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+    if response.ok:
+        return response.json()["choices"][0]["message"]["content"].strip()
+    else:
+        raise requests.RequestException(f"OpenRouter error {response.status_code}: {response.text}")
+
+
+def run_lmstudio_aipp(prompt: str, model: str = "local-model") -> str:
+    """LM Studio API (OpenAI-compatible, local server)."""
+    base_url = os.getenv("LMSTUDIO_API_BASE", "http://localhost:1234/v1")
+    url = f"{base_url}/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7
+    }
+    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+    if response.ok:
+        return response.json()["choices"][0]["message"]["content"].strip()
+    else:
+        raise requests.RequestException(f"LM Studio error {response.status_code}: {response.text}")
 
 
 def run_llamacpp_server_aipp(prompt: str, model: str = "gemma-3-270m") -> str:

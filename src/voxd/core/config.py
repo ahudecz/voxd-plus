@@ -100,18 +100,26 @@ DEFAULT_CONFIG = {
     "aipp_models": {
         "llamacpp_server": ["gemma-3-270m"],
         "ollama": ["llama3.2:latest", "mistral:latest", "gemma3:latest", "qwen2.5-coder:1.5b"],
-        "openai": ["gpt-4o-mini-2024-07-18"],
-        "anthropic": ["claude-3-opus-20240229", "claude-3-haiku"],
-        "xai": ["grok-3-latest"]
+        "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+        "anthropic": ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", "claude-3-opus-latest"],
+        "xai": ["grok-3-latest", "grok-2-latest"],
+        "gemini": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
+        "groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+        "openrouter": ["google/gemini-2.0-flash-001", "anthropic/claude-3.5-sonnet", "openai/gpt-4o-mini"],
+        "lmstudio": ["local-model"]
     },
 
     # New: Selected model per provider
     "aipp_selected_models": {
         "llamacpp_server": "qwen2.5-3b-instruct-q4_k_m",
         "ollama": "gemma3:latest",
-        "openai": "gpt-4o-mini-2024-07-18",
-        "anthropic": "claude-3-opus-20240229",
-        "xai": "grok-3-latest"
+        "openai": "gpt-4o-mini",
+        "anthropic": "claude-3-5-sonnet-latest",
+        "xai": "grok-3-latest",
+        "gemini": "gemini-2.0-flash",
+        "groq": "llama-3.3-70b-versatile",
+        "openrouter": "google/gemini-2.0-flash-001",
+        "lmstudio": "local-model"
     },
 
     # llama.cpp settings
