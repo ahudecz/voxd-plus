@@ -51,7 +51,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, typing=False, appl
         logger = SessionLogger(cfg.log_enabled, cfg.log_location)
 
     # === Disk check
-    target = (Path(tempfile.gettempdir()) / "voxd_temp") if not preserve_audio else Path.home()
+    target = (Path(tempfile.gettempdir()) / "voxd_plus_temp") if not preserve_audio else Path.home()
     target.mkdir(parents=True, exist_ok=True)
     _print_disk_space_status(target)
 

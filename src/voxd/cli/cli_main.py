@@ -66,7 +66,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     
     # Disk space check: choose target directory
     from voxd.paths import RECORDINGS_DIR
-    target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxd_temp")
+    target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxd_plus_temp")
     target.mkdir(parents=True, exist_ok=True)
 
     while True:
@@ -328,7 +328,7 @@ def main():
 
     # Disk space check for quick actions as well
     from voxd.paths import RECORDINGS_DIR
-    target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxd_temp")
+    target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxd_plus_temp")
     target.mkdir(parents=True, exist_ok=True)
     _print_disk_space_status(target)
 

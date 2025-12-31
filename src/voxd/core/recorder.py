@@ -16,7 +16,7 @@ class AudioRecorder:
         self.channels = channels
         self.recording = []
         self.is_recording = False
-        self.temp_dir = Path(tempfile.gettempdir()) / "voxd_temp"
+        self.temp_dir = Path(tempfile.gettempdir()) / "voxd_plus_temp"
         self.temp_dir.mkdir(exist_ok=True)
         self.last_temp_file = None
         # Chunking configuration

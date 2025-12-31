@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 
 def _socket_path():
-    return Path.home() / ".config" / "voxd" / "voxd.sock"
+    return Path.home() / ".config" / "voxd-plus" / "voxd-plus.sock"
 
 def start_ipc_server(trigger_callback):
     """Starts a background thread that listens for 'trigger_record' and calls trigger_callback()."""

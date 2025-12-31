@@ -37,7 +37,7 @@ class VoxdApp(QWidget):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        self.setWindowTitle("voxd")
+        self.setWindowTitle("voxd-plus")
         self.setFixedSize(340, 162)  # Adjusted for spacing after drag bar
         self.setStyleSheet("""
             QWidget {
@@ -108,7 +108,7 @@ class VoxdApp(QWidget):
         self.help_button.clicked.connect(self.show_help_dialog)
         
         # Drag handle bar for easy window movement
-        self.drag_bar = QLabel("voxd")
+        self.drag_bar = QLabel("voxd-plus")
         self.drag_bar.setFixedHeight(18)
         self.drag_bar.setStyleSheet(f"""
             background-color: {UI_GRAY_COLOR}; 
@@ -381,7 +381,7 @@ class VoxdApp(QWidget):
     def show_help_dialog(self):
         """Show help instructions dialog."""
         dialog = QDialog(self)
-        dialog.setWindowTitle("VOXD Help")
+        dialog.setWindowTitle("VOXD-Plus Help")
         dialog.setMinimumWidth(450)
         dialog.setStyleSheet("background-color: #2e2e2e; color: white;")
         

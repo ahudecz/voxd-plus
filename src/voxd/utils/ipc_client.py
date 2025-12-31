@@ -2,7 +2,7 @@ import socket
 from pathlib import Path
 
 def _socket_path() -> Path:
-    return Path.home() / ".config" / "voxd" / "voxd.sock"
+    return Path.home() / ".config" / "voxd-plus" / "voxd-plus.sock"
 
 def send_trigger():
     """Connect to the running app and send 'trigger_record'."""

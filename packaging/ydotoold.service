@@ -3,7 +3,7 @@ Description=ydotool user daemon
 After=default.target
 
 [Service]
-ExecStart=/usr/bin/voxd-ydotoold
+ExecStart=/usr/bin/voxd-plus-ydotoold
 Restart=on-failure
 RestartSec=1s
 

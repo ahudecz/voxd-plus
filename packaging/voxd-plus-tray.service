@@ -1,0 +1,13 @@
+[Unit]
+Description=VOXD-Plus tray mode (user)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/voxd-plus --tray
+Restart=on-failure
+RestartSec=2s
+Environment=YDOTOOL_SOCKET=%h/.ydotool_socket
+
+[Install]
+WantedBy=default.target

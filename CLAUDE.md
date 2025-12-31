@@ -23,13 +23,13 @@ source .venv/bin/activate
 pip install -e .
 
 # Run the app in different modes
-voxd --gui          # GUI mode
-voxd --tray         # System tray mode (background)
-voxd --cli          # CLI mode (default)
-voxd --flux         # VAD-triggered mode
+voxd-plus --gui          # GUI mode
+voxd-plus --tray         # System tray mode (background)
+voxd-plus --cli          # CLI mode (default)
+voxd-plus --flux         # VAD-triggered mode
 
 # Trigger recording (for hotkey integration)
-voxd --trigger-record
+voxd-plus --trigger-record
 
 # Run tests
 pytest
@@ -37,8 +37,8 @@ pytest tests/test_foo.py -v        # Single test file
 pytest -k "test_name" -v           # Single test by name
 
 # Diagnostics
-voxd --diagnose     # Check audio devices, ydotool status
-voxd --verbose      # Enable debug logging
+voxd-plus --diagnose     # Check audio devices, ydotool status
+voxd-plus --verbose      # Enable debug logging
 ```
 
 ## Architecture
@@ -74,11 +74,11 @@ The recording overlay (`overlay/`) runs independently and monitors the microphon
 
 Hotkey triggering uses Unix socket IPC:
 - `utils/ipc_server.py` - Listens for trigger signals in GUI/tray modes
-- `utils/ipc_client.py` - Sends trigger signal (`voxd --trigger-record`)
+- `utils/ipc_client.py` - Sends trigger signal (`voxd-plus --trigger-record`)
 
 ## Configuration
 
-Config file: `~/.config/voxd/config.yaml`
+Config file: `~/.config/voxd-plus/config.yaml`
 
 Key settings in `core/config.py`:
 - `typing_method`: "clipboard" (default) or "direct" - clipboard paste avoids keyboard layout issues

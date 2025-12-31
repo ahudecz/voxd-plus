@@ -80,13 +80,13 @@ sudo -v || true
 APP_DIR="$HOME/.local/share/applications"
 ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
 ICON_DIR_64="$HOME/.local/share/icons/hicolor/64x64/apps"
-ICON_DEST="$ICON_DIR/voxd.png"
-ICON_DEST_64="$ICON_DIR_64/voxd.png"
+ICON_DEST="$ICON_DIR/voxd-plus.png"
+ICON_DEST_64="$ICON_DIR_64/voxd-plus.png"
 ICON_SRC="$SCRIPT_DIR/src/voxd/assets/voxd-0.png"
 
-DESKTOP_GUI="$APP_DIR/voxd-gui.desktop"
-DESKTOP_TRAY="$APP_DIR/voxd-tray.desktop"
-DESKTOP_FLUX="$APP_DIR/voxd-flux.desktop"
+DESKTOP_GUI="$APP_DIR/voxd-plus-gui.desktop"
+DESKTOP_TRAY="$APP_DIR/voxd-plus-tray.desktop"
+DESKTOP_FLUX="$APP_DIR/voxd-plus-flux.desktop"
 
 create_icon() {
   [[ -f "$ICON_SRC" ]] || { msg "Icon not found at $ICON_SRC – skipping icon copy."; return; }
@@ -98,14 +98,14 @@ create_icon() {
 create_desktop() {
   local mode="$1" dest="$2"
 
-  # Try to locate voxd executable (prefer PATH); fall back to plain command
-  local voxd_path="voxd"
-  if command -v voxd >/dev/null 2>&1; then
-    voxd_path=$(command -v voxd)
+  # Try to locate voxd-plus executable (prefer PATH); fall back to plain command
+  local voxd_path="voxd-plus"
+  if command -v voxd-plus >/dev/null 2>&1; then
+    voxd_path=$(command -v voxd-plus)
   else
-    for candidate in "$HOME/.local/bin/voxd" \
-                    "/usr/local/bin/voxd" \
-                    "/usr/bin/voxd"; do
+    for candidate in "$HOME/.local/bin/voxd-plus" \
+                    "/usr/local/bin/voxd-plus" \
+                    "/usr/bin/voxd-plus"; do
       if [[ -x "$candidate" ]]; then
         voxd_path="$candidate"
         break
@@ -118,9 +118,9 @@ create_desktop() {
   cat > "$dest" <<EOF
 [Desktop Entry]
 Type=Application
-Name=VOXD ($mode)
+Name=VOXD-Plus ($mode)
 Exec=$exec_cmd
-Icon=voxd
+Icon=voxd-plus
 Terminal=false
 Categories=Utility;AudioVideo;
 EOF
@@ -134,12 +134,12 @@ update_caches() {
       timeout 20s gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" || true
   else
       if command -v xdg-icon-resource >/dev/null; then
-        timeout 10s xdg-icon-resource install --noupdate --size 64 "$ICON_DEST_64" voxd || true
+        timeout 10s xdg-icon-resource install --noupdate --size 64 "$ICON_DEST_64" voxd-plus || true
       fi
   fi
 }
 
-install_voxd_launchers() {
+install_voxd_plus_launchers() {
   mkdir -p "$APP_DIR"
   create_icon
   create_desktop gui  "$DESKTOP_GUI"
@@ -661,7 +661,7 @@ fi
 # You can change these without editing code via env vars.
 VOXD_BIN_REPO="${VOXD_BIN_REPO:-jakovius/voxd-prebuilts}"
 VOXD_BIN_TAG="${VOXD_BIN_TAG:-}"
-VOXD_BIN_DIR="$HOME/.local/share/voxd/bin"
+VOXD_BIN_DIR="$HOME/.local/share/voxd-plus/bin"
 mkdir -p "$VOXD_BIN_DIR"
 
 detect_cpu_variant() {
@@ -874,7 +874,7 @@ spinner_stop 0
 # ──────────────────  6. default model  ───────────────────────────────────────–
 # Store in XDG data dir
 MODEL_BASE="${XDG_DATA_HOME:-$HOME/.local/share}"
-XDG_MODEL_DIR="$MODEL_BASE/voxd/models"
+XDG_MODEL_DIR="$MODEL_BASE/voxd-plus/models"
 XDG_MODEL_FILE="$XDG_MODEL_DIR/ggml-base.en.bin"
 
 # Ensure XDG target directory exists
@@ -1012,7 +1012,7 @@ spinner_stop 0
 
 # e) Ensure Qwen model is available (non-interactive)
 spinner_start "Ensuring Qwen 2.5 3B-Instruct model"
-LLAMACPP_MODELS_DIR="$HOME/.local/share/voxd/llamacpp_models"
+LLAMACPP_MODELS_DIR="$HOME/.local/share/voxd-plus/llamacpp_models"
 if [[ ! -f "$LLAMACPP_MODELS_DIR/qwen2.5-3b-instruct-q4_k_m.gguf" ]]; then
   download_default_llamacpp_model "$LLAMACPP_MODELS_DIR" || true
 fi
@@ -1096,10 +1096,10 @@ if [[ $SELINUX_ACTIVE ]]; then
   echo "ℹ️  SELinux policy 'whisper_execmem' installed. If whisper-cli still throws execmem denials, consult README or run 'sudo setenforce 0' for a temporary test."
 fi
 
-spinner_start "Setting up global 'voxd' command (pipx)"
-# Offer to install pipx (if missing) and register voxd command globally.
+spinner_start "Setting up global 'voxd-plus' command (pipx)"
+# Offer to install pipx (if missing) and register voxd-plus command globally.
 if ! command -v pipx >/dev/null; then
-  msg "pipx not detected – installing pipx for global 'voxd' command"
+  msg "pipx not detected – installing pipx for global 'voxd-plus' command"
   case "$PM" in
     apt)   sudo apt install -y pipx ;;
     dnf|dnf5)   sudo $PM install -y pipx ;;
@@ -1123,11 +1123,11 @@ if ! command -v pipx >/dev/null; then
 fi
 
 if command -v pipx >/dev/null; then
-  if pipx list 2>/dev/null | grep -q "voxd "; then
-    msg "'voxd' already installed via pipx – forcing update"
+  if pipx list 2>/dev/null | grep -q "voxd-plus "; then
+    msg "'voxd-plus' already installed via pipx – forcing update"
     pipx install --force "$PWD" || true
   else
-    msg "Installing 'voxd' globally via pipx"
+    msg "Installing 'voxd-plus' globally via pipx"
     pipx install --force "$PWD" || true
   fi
 else
@@ -1138,14 +1138,14 @@ spinner_stop 0
 # ──────────────────  10b. install desktop launchers (auto, all modes) ────────
 spinner_start "Installing desktop launchers (gui, tray, flux)"
 _launch_rc=0
-timeout 60s install_voxd_launchers || _launch_rc=$?
+timeout 60s install_voxd_plus_launchers || _launch_rc=$?
 spinner_stop $_launch_rc
 
 # ──────────────────  Final Idempotency Report (console + log) ────────────────
 note "Idempotency report:"
 if [[ -d .venv ]]; then line="  • venv: present (.venv)"; else line="  • venv: will be created"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
 if command -v whisper-cli >/dev/null 2>&1; then line="  • whisper-cli: present ($(command -v whisper-cli))"; else line="  • whisper-cli: not found"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
-MODEL_BASE_REPORT="${XDG_DATA_HOME:-$HOME/.local/share}"; MODEL_FILE_REPORT="$MODEL_BASE_REPORT/voxd/models/ggml-base.en.bin"
+MODEL_BASE_REPORT="${XDG_DATA_HOME:-$HOME/.local/share}"; MODEL_FILE_REPORT="$MODEL_BASE_REPORT/voxd-plus/models/ggml-base.en.bin"
 if [[ -f "$MODEL_FILE_REPORT" ]]; then line="  • whisper model: present ($MODEL_FILE_REPORT)"; else line="  • whisper model: missing"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
   if command -v ydotool >/dev/null 2>&1 && command -v ydotoold >/dev/null 2>&1; then line="  • ydotool: present (Wayland typing enabled)"; else line="  • ydotool: not fully configured (Wayland)"; fi
@@ -1154,10 +1154,10 @@ else
 fi
 printf "%s\n" "$line" >&3; printf "%s\n" "$line"
 if command -v llama-server >/dev/null 2>&1; then line="  • llama.cpp: present (llama-server)"; else line="  • llama.cpp: not installed"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
-if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxd "; then line="  • pipx 'voxd': installed"; else line="  • pipx 'voxd': not installed"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
+if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxd-plus "; then line="  • pipx 'voxd-plus': installed"; else line="  • pipx 'voxd-plus': not installed"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
 
 if [[ -f "$DESKTOP_GUI" && -f "$DESKTOP_TRAY" && -f "$DESKTOP_FLUX" ]]; then
-  note "Desktop launchers installed: VOXD (gui, tray, flux)"
+  note "Desktop launchers installed: VOXD-Plus (gui, tray, flux)"
 else
   note "Desktop launchers installation was partial or skipped – see setup log"
 fi
@@ -1165,14 +1165,14 @@ note "Setup complete. Log: $(pwd)/$LOG_FILE"
 note "Reboot required to finalize ydotool permissions."
 printf "\n${GRN}IMPORTANT:${NC} Please reboot your system to finalize ydotool permissions.\n" >&3
 printf "${YEL}Tip:${NC} Add a system hotkey to trigger recording:\n" >&3
-printf "  Command: voxd --trigger-record\n" >&3
+printf "  Command: voxd-plus --trigger-record\n" >&3
 printf "  Where:   System Settings → Keyboard → Custom Shortcuts\n" >&3
 printf "  Example: Bind to Super+Z\n\n" >&3
 # ────────────────── 11. Hotkey Guidance (manual)  ───────────────────────────
 echo ""
 msg "Hotkey setup (manual):"
 echo "  Configure a custom keyboard shortcut in your system to run:"
-echo "    bash -c 'voxd --trigger-record'"
+echo "    bash -c 'voxd-plus --trigger-record'"
 echo "  Example binding: Super+Z (or any key you prefer)."
 echo "  Location: System Settings → Keyboard → Custom Shortcuts."
-echo "  Test the command directly with: voxd --trigger-record"
+echo "  Test the command directly with: voxd-plus --trigger-record"

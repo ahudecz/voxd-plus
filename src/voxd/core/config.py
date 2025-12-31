@@ -150,7 +150,7 @@ DEFAULT_CONFIG = {
     }
 }
 
-CONFIG_DIR = Path(user_config_dir("voxd"))
+CONFIG_DIR = Path(user_config_dir("voxd-plus"))
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
 _TPL = files("voxd.defaults").joinpath("default_config.yaml")

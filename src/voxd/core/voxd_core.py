@@ -549,7 +549,7 @@ def show_performance_dialog(parent, cfg):
         row_idx += 1
 
     last_entry = None
-    csv_path = _DATA_DIR / "voxd_perf_data.csv"
+    csv_path = _DATA_DIR / "voxd_plus_perf_data.csv"
     if cfg.perf_collect and csv_path.exists():
         try:
             with open(csv_path, "r", newline="") as f:

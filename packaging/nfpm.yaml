@@ -1,28 +1,32 @@
-name: voxd
+name: voxd-plus
 arch: ${ARCH}
 version: ${VERSION}
 release: "1"
 section: utils
 priority: optional
 license: MIT
-maintainer: "Jakov Ivkovic <jakov.iv@proton.me>"
-homepage: "https://github.com/jakovius/voxd"
-description: "VOXD - voice typing on Linux (CLI/GUI/Tray/Flux)"
-vendor: "VOXD"
+maintainer: "Ryan Doiron <rdoiron@gmail.com>"
+homepage: "https://github.com/rdoiron/voxd-plus"
+description: "VOXD-Plus - enhanced voice typing on Linux (CLI/GUI/Tray/Flux)"
+vendor: "VOXD-Plus"
+conflicts:
+  - voxd
+replaces:
+  - voxd
 
 contents:
-  # Only ship the runtime sources under /opt/voxd/src (paths relative to repo root)
+  # Only ship the runtime sources under /opt/voxd-plus/src (paths relative to repo root)
   - src: ./src
-    dst: /opt/voxd/src
+    dst: /opt/voxd-plus/src
 
   # Ship pyproject.toml so runtime can read version when metadata/git are absent
   - src: pyproject.toml
-    dst: /opt/voxd/pyproject.toml
+    dst: /opt/voxd-plus/pyproject.toml
     file_info:
       mode: 0644
 
-  - src: packaging/voxd.wrapper
-    dst: /usr/bin/voxd
+  - src: packaging/voxd-plus.wrapper
+    dst: /usr/bin/voxd-plus
     file_info:
       mode: 0755
 
@@ -36,13 +40,13 @@ contents:
     file_info:
       mode: 0644
 
-  - src: packaging/voxd-tray.service
-    dst: /usr/lib/systemd/user/voxd-tray.service
+  - src: packaging/voxd-plus-tray.service
+    dst: /usr/lib/systemd/user/voxd-plus-tray.service
     file_info:
       mode: 0644
 
-  - src: packaging/voxd-ydotoold
-    dst: /usr/bin/voxd-ydotoold
+  - src: packaging/voxd-plus-ydotoold
+    dst: /usr/bin/voxd-plus-ydotoold
     file_info:
       mode: 0755
 
@@ -91,8 +95,8 @@ overrides:
       - python3-pyperclip
       - python3-tqdm
       # sounddevice installed via venv in postinstall
-      # Note: On Fedora the ffmpeg package may require enabling RPM Fusion repository. 
-      # Note: On openSUSE the ffmpeg package (and other codecs) often come via the Packman repository. 
+      # Note: On Fedora the ffmpeg package may require enabling RPM Fusion repository.
+      # Note: On openSUSE the ffmpeg package (and other codecs) often come via the Packman repository.
     suggests:
       - ydotool
       - ffmpeg
@@ -128,5 +132,3 @@ overrides:
 scripts:
   postinstall: packaging/postinstall.sh
   postremove: packaging/postremove.sh
-
-

@@ -407,7 +407,7 @@ class FluxRunner:
     def _do_transcribe(self, audio: np.ndarray):
         import tempfile, datetime
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        tmp_dir = Path(tempfile.gettempdir()) / "voxd_temp"
+        tmp_dir = Path(tempfile.gettempdir()) / "voxd_plus_temp"
         tmp_dir.mkdir(exist_ok=True)
         wav_path = (tmp_dir / f"flux_{ts}.wav") if self.save_audio else (tmp_dir / "flux_last.wav")
         try:

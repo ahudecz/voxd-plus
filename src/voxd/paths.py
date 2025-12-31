@@ -14,8 +14,8 @@ from voxd.utils.libw import diagn
 # ─────────────────────────────────────────────────────────────────────────────
 # XDG-compatible base dirs
 HOME: Final = Path.home()
-CONFIG_DIR: Final = Path(os.getenv("XDG_CONFIG_HOME", HOME / ".config")) / "voxd"
-DATA_DIR: Final = Path(os.getenv("XDG_DATA_HOME", HOME / ".local" / "share")) / "voxd"
+CONFIG_DIR: Final = Path(os.getenv("XDG_CONFIG_HOME", HOME / ".config")) / "voxd-plus"
+DATA_DIR: Final = Path(os.getenv("XDG_DATA_HOME", HOME / ".local" / "share")) / "voxd-plus"
 
 CONFIG_FILE: Final = CONFIG_DIR / "config.yaml"
 
@@ -196,7 +196,7 @@ def _locate_default_llamacpp_model() -> Path:
     raise FileNotFoundError(
         "Could not locate the default llama.cpp model (qwen2.5-3b-instruct-q4_k_m.gguf).\n"
         "Checked $VOXD_LLAMACPP_MODEL_PATH, XDG data dir, and repo-local.\n"
-        "Run setup.sh with llama.cpp option or download the model manually into your ~/.local/share/voxd/llamacpp_models directory."
+        "Run setup.sh with llama.cpp option or download the model manually into your ~/.local/share/voxd-plus/llamacpp_models directory."
     )
 
 @lru_cache(maxsize=1)
@@ -283,7 +283,7 @@ def _locate_base_model() -> Path:
     raise FileNotFoundError(
         "Could not locate the default Whisper model (ggml-base.en.bin).\n"
         "Checked $VOXD_MODEL_PATH, XDG data dir, and repo-local.\n"
-        "Run setup.sh or download the model manually into your ~/.local/share/voxd/models directory."
+        "Run setup.sh or download the model manually into your ~/.local/share/voxd-plus/models directory."
     )
 
 @lru_cache(maxsize=1)

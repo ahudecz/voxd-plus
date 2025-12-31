@@ -142,7 +142,7 @@ def _get_version() -> str:
             from pathlib import Path
             import re
             candidates = [
-                Path("/opt/voxd/pyproject.toml"),
+                Path("/opt/voxd-plus/pyproject.toml"),
                 Path(__file__).parents[2] / "pyproject.toml",
             ]
             for pyproject_path in candidates:
@@ -173,9 +173,9 @@ def _systemd_user_available() -> bool:
         return False
 
 def _ensure_voxd_tray_unit() -> None:
-    """Ensure a voxd-tray.service user unit exists (packaged or per-user fallback)."""
+    """Ensure a voxd-plus-tray.service user unit exists (packaged or per-user fallback)."""
     try:
-        pkg_unit = Path("/usr/lib/systemd/user/voxd-tray.service")
+        pkg_unit = Path("/usr/lib/systemd/user/voxd-plus-tray.service")
         if pkg_unit.exists():
             return
         user_dir = Path.home() / ".config/systemd/user"
@@ -183,15 +183,15 @@ def _ensure_voxd_tray_unit() -> None:
             user_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
             pass
-        unit_path = user_dir / "voxd-tray.service"
+        unit_path = user_dir / "voxd-plus-tray.service"
         if not unit_path.exists():
             unit_path.write_text(
                 "[Unit]\n"
-                "Description=VOXD tray mode (user)\n"
+                "Description=VOXD-Plus tray mode (user)\n"
                 "After=default.target\n\n"
                 "[Service]\n"
                 "Type=simple\n"
-                "ExecStart=/usr/bin/voxd --tray\n"
+                "ExecStart=/usr/bin/voxd-plus --tray\n"
                 "Restart=on-failure\n"
                 "RestartSec=2s\n"
                 "Environment=YDOTOOL_SOCKET=%h/.ydotool_socket\n\n"
@@ -202,7 +202,7 @@ def _ensure_voxd_tray_unit() -> None:
         pass
 
 def _xdg_autostart_path() -> Path:
-    return Path.home() / ".config" / "autostart" / "voxd-tray.desktop"
+    return Path.home() / ".config" / "autostart" / "voxd-plus-tray.desktop"
 
 def _ensure_xdg_entry() -> bool:
     try:
@@ -212,8 +212,8 @@ def _ensure_xdg_entry() -> bool:
             p.write_text(
                 "[Desktop Entry]\n"
                 "Type=Application\n"
-                "Name=VOXD (tray)\n"
-                "Exec=voxd --tray\n"
+                "Name=VOXD-Plus (tray)\n"
+                "Exec=voxd-plus --tray\n"
                 "X-GNOME-Autostart-enabled=true\n"
                 "Hidden=false\n"
             )
@@ -260,7 +260,7 @@ def _handle_autostart(arg_value: str) -> int:
 
         def _is_enabled() -> bool:
             try:
-                r = subprocess.run(["systemctl", "--user", "is-enabled", "voxd-tray.service"],
+                r = subprocess.run(["systemctl", "--user", "is-enabled", "voxd-plus-tray.service"],
                                    check=False, capture_output=True)
                 return r.returncode == 0
             except Exception:
@@ -268,16 +268,16 @@ def _handle_autostart(arg_value: str) -> int:
 
         def _is_active() -> bool:
             try:
-                r = subprocess.run(["systemctl", "--user", "is-active", "voxd-tray.service"],
+                r = subprocess.run(["systemctl", "--user", "is-active", "voxd-plus-tray.service"],
                                    check=False, capture_output=True)
                 return r.returncode == 0
             except Exception:
                 return False
 
         if desired:
-            subprocess.run(["systemctl", "--user", "enable", "--now", "voxd-tray.service"], check=False)
+            subprocess.run(["systemctl", "--user", "enable", "--now", "voxd-plus-tray.service"], check=False)
         else:
-            subprocess.run(["systemctl", "--user", "disable", "--now", "voxd-tray.service"], check=False)
+            subprocess.run(["systemctl", "--user", "disable", "--now", "voxd-plus-tray.service"], check=False)
 
         enabled = _is_enabled()
         active = _is_active()

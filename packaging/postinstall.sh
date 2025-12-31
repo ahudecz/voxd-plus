@@ -29,17 +29,17 @@ fi
 # Optional: load SELinux policy if shipped (rpm-based systems)
 if command -v getenforce >/dev/null 2>&1; then
   if [ "$(getenforce 2>/dev/null)" = "Enforcing" ]; then
-    if command -v semodule >/dev/null 2>&1 && [ -f "/opt/voxd/packaging/whisper_execmem.pp" ]; then
-      semodule -i /opt/voxd/packaging/whisper_execmem.pp || true
+    if command -v semodule >/dev/null 2>&1 && [ -f "/opt/voxd-plus/packaging/whisper_execmem.pp" ]; then
+      semodule -i /opt/voxd-plus/packaging/whisper_execmem.pp || true
     fi
   fi
 fi
 
-echo "voxd installed. Each user should run: voxd --setup"
+echo "voxd-plus installed. Each user should run: voxd-plus --setup"
 
 # Create a local virtualenv to ensure missing Python deps (e.g., sounddevice) are available
 # We inherit system site-packages to avoid duplicating distro Python libs
-APPDIR="/opt/voxd"
+APPDIR="/opt/voxd-plus"
 
 # Pick a Python >= 3.9 if available; attempt RPM install on openSUSE if too old
 pick_python() {
@@ -132,7 +132,7 @@ try:
     names = [str(d.get('name','')).lower() for d in sd.query_devices()]
     has_pulse = any('pulse' in n for n in names)
     if not has_pulse:
-        print('[voxd] Tip: No "pulse" device detected. Install your distro\'s pulse shim and ALSA plugins:')
+        print('[voxd-plus] Tip: No "pulse" device detected. Install your distro\'s pulse shim and ALSA plugins:')
         print('  - Debian/Ubuntu: sudo apt install alsa-plugins pavucontrol (ensure pulseaudio or pipewire-pulse active)')
         print('  - Fedora: sudo dnf install alsa-plugins-pipewire pavucontrol (ensure pipewire-pulseaudio active)')
         print('  - openSUSE: sudo zypper install alsa-plugins-pulse pavucontrol (ensure pulse active)')

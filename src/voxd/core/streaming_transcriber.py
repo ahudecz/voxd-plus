@@ -197,7 +197,7 @@ class StreamingWhisperTranscriber:
     def _save_chunk_to_file(self, audio_data: np.ndarray) -> Optional[Path]:
         """Save audio chunk to temporary WAV file."""
         try:
-            temp_dir = Path(tempfile.gettempdir()) / "voxd_temp"
+            temp_dir = Path(tempfile.gettempdir()) / "voxd_plus_temp"
             temp_dir.mkdir(exist_ok=True)
             
             temp_file = temp_dir / f"stream_chunk_{threading.get_ident()}_{id(audio_data)}.wav"
