@@ -117,12 +117,25 @@ class AudioRecorder:
             return None
 
         verbo("[recorder] Stopping recording...")
+        self.is_recording = False  # Signal callbacks to stop accepting new data
+
+        # Allow in-flight audio frames to be delivered (sounddevice buffers ~50-200ms)
+        import time
+        time.sleep(0.2)
+
         if hasattr(self, 'stream') and self.stream is not None:
             self.stream.stop()
             self.stream.close()
-        self.is_recording = False
 
-        if hasattr(self, 'streaming_buffer'):
+        # Emit remaining streaming buffer before clearing (streaming mode only)
+        if hasattr(self, 'streaming_buffer') and self.streaming_buffer:
+            remaining = np.concatenate(self.streaming_buffer, axis=0)
+            if len(remaining) > 0 and hasattr(self, 'streaming_callback'):
+                try:
+                    verbo(f"[recorder] Emitting final chunk of {len(remaining)} frames")
+                    self.streaming_callback(remaining)
+                except Exception as e:
+                    verr(f"[recorder] Final chunk callback error: {e}")
             self.streaming_buffer = []
 
         if self.record_chunked and self._chunk_wave is not None:

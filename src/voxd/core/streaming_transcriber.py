@@ -388,8 +388,8 @@ class StreamingWhisperTranscriber:
         # Process any remaining audio in buffer (only if it's substantial and not already processed)
         if self.audio_buffer:
             concatenated = np.concatenate(self.audio_buffer, axis=0)
-            # Only process if buffer has meaningful audio (at least 0.5 seconds)
-            min_final_frames = int(0.5 * self.samplerate)
+            # Only process if buffer has meaningful audio (at least 0.1 seconds)
+            min_final_frames = int(0.1 * self.samplerate)
             if len(concatenated) >= min_final_frames:
                 verbo(f"[streaming_transcriber] Finalizing: processing remaining buffer ({len(concatenated)} frames, {len(concatenated)/self.samplerate:.2f}s)")
                 self._transcribe_chunk(concatenated)
