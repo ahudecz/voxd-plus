@@ -21,6 +21,11 @@ dependencies = [
   "pyqtgraph>=0.13"
 ]
 
+[project.optional-dependencies]
+hotkey = ["evdev>=1.6"]
+neural-vad = ["onnxruntime>=1.16"]
+neural-vad-torch = ["torch>=2.0"]
+all = ["evdev>=1.6", "onnxruntime>=1.16"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

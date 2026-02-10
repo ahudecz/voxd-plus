@@ -5,6 +5,7 @@ from voxd.core.recorder import AudioRecorder
 from voxd.core.typer import SimulatedTyper
 from voxd.core.clipboard import ClipboardManager
 from voxd.core.aipp import get_final_text
+from voxd.core.pipeline import pipeline_get_final_text
 from voxd.utils.libw import verbo, verr
 from voxd.utils.whisper_auto import ensure_whisper_cli
 from datetime import datetime
@@ -135,10 +136,19 @@ class StreamingCoreProcessThread(QThread):
         trans_end_ts = time()
         
         aipp_start_ts = aipp_end_ts = None
-        processed_text = get_final_text(final_text, self.cfg)
-        if self.cfg.aipp_enabled and processed_text and processed_text != final_text:
-            aipp_start_ts = time()
-            aipp_end_ts = time()
+
+        # Detect focused app for context-aware formatting
+        app_context = None
+        if self.cfg.data.get("pipeline_enabled", False) and self.cfg.data.get("app_detect_enabled", True):
+            try:
+                from voxd.core.app_detect import detect_focused_app
+                app_context = detect_focused_app(self.cfg)
+            except Exception:
+                pass
+
+        aipp_start_ts = time()
+        processed_text = pipeline_get_final_text(final_text, self.cfg, app_context)
+        aipp_end_ts = time()
         
         try:
             if self.cfg.aipp_enabled:
@@ -160,33 +170,24 @@ class StreamingCoreProcessThread(QThread):
             except Exception as e:
                 verr(f"[streaming_core] Clipboard copy failed: {e}")
 
-        # In streaming mode, text is already typed incrementally during recording
-        # Only type final text if AIPP changed it and there's a difference
-        if self.cfg.typing and processed_text:
-            # Check if AIPP modified the text
-            if self.cfg.aipp_enabled and processed_text != final_text:
-                # AIPP changed the text - type the corrected version
-                # But only the difference to avoid retyping everything
-                if processed_text.startswith(self.last_typed_text):
-                    # Only type the new suffix
-                    suffix = processed_text[len(self.last_typed_text):]
-                    if suffix:
-                        self.status_changed.emit("Typing")
-                        try:
-                            self.typer.type_incremental(self.last_typed_text, processed_text)
-                            self.last_typed_text = processed_text
-                            self.last_typed_length = len(processed_text)
-                        except Exception as e:
-                            print(f"[streaming_core] Final typing failed: {e}")
-                else:
-                    # Text changed significantly - type the full corrected version
-                    self.status_changed.emit("Typing")
-                    try:
-                        self.typer.type(processed_text)
-                    except Exception as e:
-                        print(f"[streaming_core] Typing failed: {e}")
-            # If AIPP didn't change text, it's already been typed incrementally - do nothing
-            print()
+        # In streaming mode, text is already typed incrementally during recording.
+        # Apply correction sweep if pipeline/AIPP changed the text.
+        pipeline_active = self.cfg.data.get("pipeline_enabled", False) or self.cfg.aipp_enabled
+        text_changed = pipeline_active and processed_text and processed_text != final_text
+
+        if self.cfg.typing and processed_text and text_changed:
+            self.status_changed.emit("Correcting")
+            try:
+                # Use type_rewrite to backspace the raw text and replace with polished version
+                self.typer.type_rewrite(processed_text, self.last_typed_length)
+                self.last_typed_text = processed_text
+                self.last_typed_length = len(processed_text)
+                verbo(f"[streaming_core] Correction sweep applied: {self.last_typed_length} chars")
+            except Exception as e:
+                print(f"[streaming_core] Correction sweep failed: {e}")
+        elif self.cfg.typing and processed_text and not text_changed:
+            # Text unchanged — already typed incrementally, nothing to do
+            verbo("[streaming_core] No correction needed, text already typed")
         
         if self.cfg.perf_collect:
             from voxd.utils.performance import write_perf_entry

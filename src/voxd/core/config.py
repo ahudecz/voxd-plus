@@ -142,6 +142,49 @@ DEFAULT_CONFIG = {
     
 
 
+    # --- Multi-pass pipeline (replaces single-shot AIPP) -----------------------
+    "pipeline_enabled": False,         # Master switch; False = legacy single AIPP
+    "pipeline_passes": {
+        "clean": {
+            "enabled": True,
+            "llm_repair": True,        # Run small LLM after regex if >15% changed
+            "provider": None,          # None = use global AIPP provider
+            "model": None,             # None = use global AIPP model
+        },
+        "grammar": {
+            "enabled": True,
+            "provider": None,
+            "model": None,
+            "prompt": "Fix grammar, add correct punctuation and capitalization. Preserve the original meaning exactly. Output ONLY the corrected text, nothing else.",
+        },
+        "format": {
+            "enabled": True,
+            "provider": None,
+            "model": None,
+            # prompt is dynamically built from app_detect profile
+        },
+    },
+
+    # --- App detection (context-aware formatting for pipeline Pass 3) ---------
+    "app_detect_enabled": True,
+    "app_profile_overrides": {},       # User overrides: {"obsidian": "prose"}
+    "app_custom_profiles": {},         # Custom profiles with prompt + classes
+
+    # --- Hotkey daemon --------------------------------------------------------
+    "hotkey_daemon_enabled": False,
+    "hotkey_trigger_key": "KEY_CAPSLOCK",
+    "hotkey_mode": "double_tap",       # double_tap | hold | single
+    "hotkey_double_tap_window_ms": 350,
+    "hotkey_hold_threshold_ms": 300,
+    "hotkey_suppress_original": True,
+
+    # --- Flux neural VAD (hybrid energy + Silero) ----------------------------
+    "flux_neural_vad_enabled": False,  # Requires onnxruntime or torch
+    "flux_neural_vad_threshold": 0.5,
+    "flux_adaptive_noise": True,       # Dual-rate noise floor EMA
+    "flux_typing_cooldown_ms": 500,    # Cooldown after typing to prevent self-trigger
+    "flux_typing_cooldown_boost_db": 6.0,  # Raise start threshold during cooldown
+
     "aipp_prompts": {
         "default": "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text.",
         "prompt1": "Interpret the following text to the best of your ability as a C programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding C code.",

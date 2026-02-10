@@ -316,6 +316,7 @@ def main():
     mode_group.add_argument("--tray", action="store_true", help="Launch VOXD tray-only mode (background)")
     mode_group.add_argument("--flux", action="store_true", help="Launch VOXD VAD-triggered dictation mode")
     mode_group.add_argument("--flux-tuner", action="store_true", help="Launch Flux Tuner (GUI)")
+    mode_group.add_argument("--hotkeyd", action="store_true", help="Launch hotkey daemon (evdev-based global hotkey listener)")
     parser.add_argument(
         "--setup",
         action="store_true",
@@ -393,7 +394,7 @@ def main():
     # ------------------------------------------------------------
     #         Top-level help handling (only when no sub-mode or QA)
     # ------------------------------------------------------------
-    if not any([args.gui, args.tray, args.flux, args.flux_tuner]) and not (unknown_flags & cli_flags):
+    if not any([args.gui, args.tray, args.flux, args.flux_tuner, args.hotkeyd]) and not (unknown_flags & cli_flags):
         if "-h" in unknown or "--help" in unknown:
             parser.print_help()
             # Show installed version
@@ -416,7 +417,7 @@ def main():
             sys.exit(0)
 
     # Implicit CLI mode if any CLI-specific flags are present without a mode
-    implied_cli = (not any([args.gui, args.tray, args.flux, args.flux_tuner]) and (unknown_flags & cli_flags))
+    implied_cli = (not any([args.gui, args.tray, args.flux, args.flux_tuner, args.hotkeyd]) and (unknown_flags & cli_flags))
 
     # If we're just the hotkey sender, dispatch and exit immediately
     if args.trigger_record:
@@ -453,6 +454,8 @@ def main():
         mode = "flux"
     elif args.flux_tuner:
         mode = "flux_tuner"
+    elif args.hotkeyd:
+        mode = "hotkeyd"
     else:
         # Default to CLI when no explicit sub-mode selected
         mode = "cli" if implied_cli or True else "cli"
@@ -553,6 +556,9 @@ def main():
     elif mode == "flux_tuner":
         from voxd.flux.flux_tuner import main as flux_tuner_main
         flux_tuner_main()
+    elif mode == "hotkeyd":
+        from voxd.utils.hotkey_daemon import run_hotkey_daemon
+        run_hotkey_daemon(cfg)
     else:
         print(f"[__main__] ❌ Unknown app_mode: {mode}")
         sys.exit(1)

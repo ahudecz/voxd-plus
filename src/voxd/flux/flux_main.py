@@ -209,9 +209,6 @@ class FluxVAD:
         }
 
 
-## Silero backend removed
-
-
 class FluxRunner:
     def __init__(self, cfg: AppConfig, *, min_silence_ms: int | None, min_speech_ms: int | None, pre_roll_ms: int | None, save_audio: bool, debug_vad: bool = False, no_resample: bool = False, monitor: bool | None = None, calib_sec: float | None = None, noise_suppress: bool | None = None):
         self.cfg = cfg
@@ -251,6 +248,34 @@ class FluxRunner:
                              abs_keep_db=abs_keep,
                              noise_ema=float(cfg.data.get("flux_noise_ema", 0.05)))
         verbo("[flux] Using Flux VAD backend.")
+
+        # Neural VAD (hybrid gate — confirm speech after energy passes)
+        self.neural_vad_enabled = bool(cfg.data.get("flux_neural_vad_enabled", False))
+        self.neural_vad = None
+        if self.neural_vad_enabled:
+            try:
+                from voxd.flux.silero_vad import SileroVAD
+                threshold = float(cfg.data.get("flux_neural_vad_threshold", 0.5))
+                self.neural_vad = SileroVAD(threshold=threshold, sample_rate=self.fs)
+                if self.neural_vad.initialize():
+                    verbo("[flux] Neural VAD (Silero) enabled as hybrid gate.")
+                else:
+                    verr("[flux] Neural VAD failed to initialize, falling back to energy-only.")
+                    self.neural_vad = None
+                    self.neural_vad_enabled = False
+            except ImportError:
+                verr("[flux] Neural VAD requested but silero_vad module unavailable.")
+                self.neural_vad_enabled = False
+            except Exception as e:
+                verr(f"[flux] Neural VAD init error: {e}")
+                self.neural_vad_enabled = False
+
+        # Adaptive noise tracking config
+        self.adaptive_noise = bool(cfg.data.get("flux_adaptive_noise", True))
+
+        # Typing cooldown boost (raise threshold after segment to avoid self-trigger)
+        self.typing_cooldown_ms = int(cfg.data.get("flux_typing_cooldown_ms", 500))
+        self.typing_cooldown_boost_db = float(cfg.data.get("flux_typing_cooldown_boost_db", 6.0))
 
         # Noise suppressor
         self.noise_suppress_enabled = bool(cfg.data.get("flux_noise_subtract_enabled", True)) if noise_suppress is None else bool(noise_suppress)
@@ -336,7 +361,36 @@ class FluxRunner:
                     self.ns.update_noise(frame)
                 except Exception:
                     pass
-                speaking = bool(self.vad.is_speech(frame))
+
+                # Adaptive noise: dual-rate EMA (fast down, slow up)
+                if self.adaptive_noise and not self.vad._speaking:
+                    lvl = self.vad._dbfs_of(frame)
+                    if lvl < self.vad.noise_db:
+                        # Noise decreased (source removed) — adapt fast
+                        alpha = min(self.vad.noise_ema * 5, 0.3)
+                    else:
+                        # Noise increased (might be speech) — adapt slowly
+                        alpha = self.vad.noise_ema
+                    self.vad.noise_db += alpha * (lvl - self.vad.noise_db)
+
+                # Typing cooldown: temporarily boost start threshold
+                if self.cooldown_run > 0:
+                    # Save original and boost
+                    orig_start_margin = self.vad.start_margin_db
+                    self.vad.start_margin_db += self.typing_cooldown_boost_db
+                    energy_speaking = bool(self.vad.is_speech(frame))
+                    self.vad.start_margin_db = orig_start_margin
+                else:
+                    energy_speaking = bool(self.vad.is_speech(frame))
+
+                # Hybrid gate: neural VAD confirms speech after energy gate passes
+                if energy_speaking and self.neural_vad_enabled and self.neural_vad is not None:
+                    neural_ok, confidence = self.neural_vad.is_speech(frame)
+                    speaking = neural_ok
+                    if self.debug_vad and not neural_ok:
+                        print(f"[vad] Energy=speech but neural rejected (conf={confidence:.2f})")
+                else:
+                    speaking = energy_speaking
             if self.debug_vad:
                 if not hasattr(self, "_dbg_cnt"):
                     self._dbg_cnt = 0
@@ -377,7 +431,14 @@ class FluxRunner:
                         self.seg_frames = []
                         self.in_speech = False
                         self.silence_run = 0
-                        self.cooldown_run = max(1, self.cooldown_ms // self.frame_ms)
+                        effective_cooldown = max(self.cooldown_ms, self.typing_cooldown_ms)
+                        self.cooldown_run = max(1, effective_cooldown // self.frame_ms)
+                        # Reset neural VAD states between utterances
+                        if self.neural_vad is not None:
+                            try:
+                                self.neural_vad.reset()
+                            except Exception:
+                                pass
                         if self.debug_vad:
                             dur = audio.size / max(self.fs, 1)
                             print(f"[vad] <<< end speech, dur={dur:.2f}s frames={audio.size}")
@@ -447,8 +508,19 @@ class FluxRunner:
             tscript, _ = self.transcriber.transcribe(str(wav_path))
             if not tscript:
                 return
-            # AIPP disabled in flux mode; get_final_text is a safe pass-through
-            final_text = get_final_text(tscript, self.cfg)
+            # Use pipeline if enabled, otherwise legacy AIPP pass-through
+            if self.cfg.data.get("pipeline_enabled", False):
+                from voxd.core.pipeline import pipeline_get_final_text
+                app_context = None
+                if self.cfg.data.get("app_detect_enabled", True):
+                    try:
+                        from voxd.core.app_detect import detect_focused_app
+                        app_context = detect_focused_app(self.cfg)
+                    except Exception:
+                        pass
+                final_text = pipeline_get_final_text(tscript, self.cfg, app_context)
+            else:
+                final_text = get_final_text(tscript, self.cfg)
             self.clipboard.copy(final_text)
             if self.cfg.typing:
                 self.typer.type(final_text)

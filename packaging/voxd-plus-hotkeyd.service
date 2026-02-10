@@ -1,0 +1,13 @@
+[Unit]
+Description=VOXD-Plus Hotkey Daemon (evdev global hotkey listener)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/voxd-plus --hotkeyd
+Restart=on-failure
+RestartSec=3s
+Environment=YDOTOOL_SOCKET=%h/.ydotool_socket
+
+[Install]
+WantedBy=default.target

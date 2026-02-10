@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (  # type: ignore
 )
 import yaml
 from voxd.core.aipp import get_final_text
+from voxd.core.pipeline import pipeline_get_final_text
 from voxd.core.model_manager import show_model_manager
 from voxd.core.transcriber import WhisperTranscriber  # type: ignore
 from voxd.utils.languages import search_languages, code_to_name, normalize_lang_code, is_valid_lang
@@ -99,13 +100,21 @@ class CoreProcessThread(QThread):
             self.finished.emit("")
             return
 
-        # --- Apply AIPP if enabled ---
+        # --- Apply pipeline or legacy AIPP ---
         aipp_start_ts = aipp_end_ts = None
-        final_text = get_final_text(tscript, self.cfg)
-        if self.cfg.aipp_enabled and final_text and final_text != tscript:
-            aipp_start_ts = time()
-            # get_final_text already ran; so timing is approximated. We skip precise.
-            aipp_end_ts = aipp_start_ts  # zero duration placeholder due to prior exec
+
+        # Detect focused app for context-aware formatting
+        app_context = None
+        if self.cfg.data.get("pipeline_enabled", False) and self.cfg.data.get("app_detect_enabled", True):
+            try:
+                from voxd.core.app_detect import detect_focused_app
+                app_context = detect_focused_app(self.cfg)
+            except Exception:
+                pass
+
+        aipp_start_ts = time()
+        final_text = pipeline_get_final_text(tscript, self.cfg, app_context)
+        aipp_end_ts = time()
 
         # === Logging ------------------------------------------------------
         try:
