@@ -131,6 +131,24 @@ class VoxdTrayApp(QObject):
             if self.thread and self.thread.isRunning():
                 self.thread.stop_recording()
             return
+        self._begin_recording()
+
+    # ── PTT helpers ──────────────────────────────────────────────────────
+    def ptt_start_recording(self):
+        """Start recording only (PTT key-down). No-op if already recording."""
+        if self.status != "VOXD":
+            return
+        self._begin_recording()
+
+    def ptt_stop_recording(self):
+        """Stop recording only (PTT key-up). No-op if not recording."""
+        if self.status != "Recording":
+            return
+        if self.thread and self.thread.isRunning():
+            self.thread.stop_recording()
+
+    def _begin_recording(self):
+        """Shared logic for starting a new recording session."""
         if self.status in ("Transcribing", "Typing"):
             return
         self.set_status("Recording")
@@ -333,7 +351,13 @@ def main():
     def on_ipc_trigger():
         QTimer.singleShot(0, tray_app.toggle_recording)
 
-    start_ipc_server(on_ipc_trigger)
+    def on_ipc_start():
+        QTimer.singleShot(0, tray_app.ptt_start_recording)
+
+    def on_ipc_stop():
+        QTimer.singleShot(0, tray_app.ptt_stop_recording)
+
+    start_ipc_server(on_ipc_trigger, start_callback=on_ipc_start, stop_callback=on_ipc_stop)
     sys.exit(app.exec())
 
 if __name__ == "__main__":

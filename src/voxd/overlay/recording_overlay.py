@@ -116,12 +116,15 @@ class RecordingOverlay(QWidget):
         self._setup_ui()
         self._connect_signals()
 
-        # Window properties
-        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+        # Window properties — overlay must never steal focus from target app
+        flags = (Qt.WindowType.FramelessWindowHint
+                 | Qt.WindowType.Tool
+                 | Qt.WindowType.WindowDoesNotAcceptFocus)
         if always_on_top:
             flags |= Qt.WindowType.WindowStaysOnTopHint
         self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
         # Timer for UI updates
         self.update_timer = QTimer()

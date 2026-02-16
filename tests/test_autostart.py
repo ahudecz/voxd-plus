@@ -43,9 +43,9 @@ def test_autostart_xdg_fallback_enable_disable(monkeypatch, tmp_path):
 
     rc_en = main_mod._handle_autostart("true")
     assert rc_en == 0
-    xdg_path = (tmp_path / ".config" / "autostart" / "voxd-tray.desktop")
+    xdg_path = (tmp_path / ".config" / "autostart" / "voxd-plus-tray.desktop")
     assert xdg_path.exists()
-    assert "Exec=voxd --tray" in xdg_path.read_text()
+    assert "Exec=voxd-plus --tray" in xdg_path.read_text()
 
     rc_dis = main_mod._handle_autostart("false")
     assert rc_dis == 0

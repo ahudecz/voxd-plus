@@ -173,7 +173,7 @@ DEFAULT_CONFIG = {
     # --- Hotkey daemon --------------------------------------------------------
     "hotkey_daemon_enabled": False,
     "hotkey_trigger_key": "KEY_CAPSLOCK",
-    "hotkey_mode": "double_tap",       # double_tap | hold | single
+    "hotkey_mode": "double_tap",       # double_tap | hold | single | ptt
     "hotkey_double_tap_window_ms": 350,
     "hotkey_hold_threshold_ms": 300,
     "hotkey_suppress_original": True,
@@ -197,9 +197,13 @@ CONFIG_DIR = Path(user_config_dir("voxd-plus"))
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
 _TPL = files("voxd.defaults").joinpath("default_config.yaml")
-# first run?  copy pristine template
+# first run?  Bootstrap from existing voxd config or copy pristine template
 if not CONFIG_PATH.exists():
-    shutil.copy(_TPL, CONFIG_PATH)
+    _VOXD_CFG = Path(user_config_dir("voxd")) / "config.yaml"
+    if _VOXD_CFG.exists():
+        shutil.copy(_VOXD_CFG, CONFIG_PATH)
+    else:
+        shutil.copy(_TPL, CONFIG_PATH)
 
 
 class AppConfig:

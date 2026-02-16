@@ -605,6 +605,24 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
             if self.runner_thread and self.runner_thread.isRunning():
                 self.runner_thread.stop_recording()
             return
+        self._begin_recording()
+
+    # ── PTT helpers ──────────────────────────────────────────────────────
+    def ptt_start_recording(self):
+        """Start recording only (PTT key-down). No-op if already recording."""
+        if self.status != "Ready":
+            return
+        self._begin_recording()
+
+    def ptt_stop_recording(self):
+        """Stop recording only (PTT key-up). No-op if not recording."""
+        if self.status != "Recording":
+            return
+        if self.runner_thread and self.runner_thread.isRunning():
+            self.runner_thread.stop_recording()
+
+    def _begin_recording(self):
+        """Shared logic for starting a new recording session."""
         self.clearFocus()
         if self.status in ("Transcribing", "Typing"):
             return
@@ -632,7 +650,7 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
             short = tscript[:80] + (" …" if len(tscript) > 80 else "")
             self.transcript_label.setText(short)
             self.transcript_label.setStyleSheet("color: white; font-size: 10pt; font-style: italic;")
-            
+
             self.clipboard_notice.setText("Copied to clipboard")
             if getattr(self.cfg, "perf_collect", False) and getattr(self.cfg, "perf_accuracy_rating_collect", False):
                 s, ok = QInputDialog.getText(
@@ -726,7 +744,13 @@ def main():
     def on_ipc_trigger():
         QTimer.singleShot(0, gui.on_button_clicked)
 
-    start_ipc_server(on_ipc_trigger)
+    def on_ipc_start():
+        QTimer.singleShot(0, gui.ptt_start_recording)
+
+    def on_ipc_stop():
+        QTimer.singleShot(0, gui.ptt_stop_recording)
+
+    start_ipc_server(on_ipc_trigger, start_callback=on_ipc_start, stop_callback=on_ipc_stop)
 
     sys.exit(app.exec())
 

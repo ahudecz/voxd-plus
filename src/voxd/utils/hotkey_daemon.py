@@ -40,6 +40,9 @@ _KEY_CODES: dict[str, int] = {
     "KEY_F18": 188,
     "KEY_SCROLLLOCK": 70,
     "KEY_PAUSE": 119,
+    "KEY_PAGEDOWN": 109,
+    "KEY_PAGEUP": 104,
+    "KEY_INSERT": 110,
 }
 
 
@@ -154,6 +157,8 @@ class HotkeyDaemon:
                     self._handle_hold(event.value)
                 elif self.mode == "single":
                     self._handle_single(event.value)
+                elif self.mode == "ptt":
+                    self._handle_ptt(event.value)
         except OSError:
             # Device disconnected
             verbo(f"[hotkeyd] Device disconnected: {device.name}")
@@ -184,21 +189,34 @@ class HotkeyDaemon:
         if value == 0:  # key up
             self._fire_trigger()
 
+    def _handle_ptt(self, value: int):
+        """Push-to-talk: key-down starts recording, key-up stops recording."""
+        if value == 1:  # key down
+            self._send_ipc(b"start_record")
+            verbo("[hotkeyd] PTT key down — start_record sent")
+        elif value == 0:  # key up
+            self._send_ipc(b"stop_record")
+            verbo("[hotkeyd] PTT key up — stop_record sent")
+
     def _fire_trigger(self):
         """Send trigger_record to VOXD's IPC socket."""
+        self._send_ipc(b"trigger_record")
+        verbo("[hotkeyd] Trigger sent!")
+
+    def _send_ipc(self, command: bytes):
+        """Send a command to VOXD's IPC socket."""
         try:
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.settimeout(1.0)
             sock.connect(self.socket_path)
-            sock.sendall(b"trigger_record")
+            sock.sendall(command)
             sock.close()
-            verbo("[hotkeyd] Trigger sent!")
         except ConnectionRefusedError:
             verbo("[hotkeyd] VOXD not running (connection refused)")
         except FileNotFoundError:
             verbo("[hotkeyd] VOXD socket not found — is VOXD running?")
         except Exception as e:
-            verr(f"[hotkeyd] Failed to send trigger: {e}")
+            verr(f"[hotkeyd] Failed to send command: {e}")
 
     def stop(self):
         """Signal the daemon to stop."""

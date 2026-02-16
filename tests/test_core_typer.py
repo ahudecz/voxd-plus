@@ -27,6 +27,7 @@ def test_typer_chunking_long_text(monkeypatch):
     mock_cfg = Mock()
     mock_cfg.data = {
         "append_trailing_space": True,
+        "typing_method": "direct",
         "typing_chunk_size": 250,
         "typing_inter_chunk_delay": 0.05
     }
@@ -73,6 +74,7 @@ def test_typer_no_chunking_short_text(monkeypatch):
     mock_cfg = Mock()
     mock_cfg.data = {
         "append_trailing_space": True,
+        "typing_method": "direct",
         "typing_chunk_size": 250,
         "typing_inter_chunk_delay": 0.05
     }

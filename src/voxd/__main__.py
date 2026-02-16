@@ -430,7 +430,6 @@ def main():
     if args.verbose:
         cfg.data["verbosity"] = True
         setattr(cfg, "verbosity", True)
-        import os
         os.environ["VOXD_VERBOSE"] = "1"
 
     # Session-only override for language

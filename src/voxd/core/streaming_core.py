@@ -98,10 +98,14 @@ class StreamingCoreProcessThread(QThread):
         self.status_changed.emit("Recording")
         
         def on_audio_chunk(audio_data: np.ndarray):
-            """Callback for audio chunks from recorder."""
-            if not self.should_stop:
-                verbo(f"[streaming_core] Received audio chunk: {len(audio_data)} frames, {len(audio_data) / recorder.fs:.2f}s")
-                transcriber.add_audio_chunk(audio_data)
+            """Callback for audio chunks from recorder.
+
+            Note: No should_stop guard here — the final chunk emitted by
+            stop_recording() must reach the transcriber.  For short PTT
+            recordings (< chunk_seconds) this is the ONLY chunk.
+            """
+            verbo(f"[streaming_core] Received audio chunk: {len(audio_data)} frames, {len(audio_data) / recorder.fs:.2f}s")
+            transcriber.add_audio_chunk(audio_data)
         
         recorder.start_streaming_recording(on_audio_chunk, chunk_seconds=chunk_seconds)
         transcriber.start(samplerate=recorder.fs, channels=recorder.channels)
@@ -170,24 +174,30 @@ class StreamingCoreProcessThread(QThread):
             except Exception as e:
                 verr(f"[streaming_core] Clipboard copy failed: {e}")
 
-        # In streaming mode, text is already typed incrementally during recording.
-        # Apply correction sweep if pipeline/AIPP changed the text.
-        pipeline_active = self.cfg.data.get("pipeline_enabled", False) or self.cfg.aipp_enabled
-        text_changed = pipeline_active and processed_text and processed_text != final_text
+        # Ensure the full text is output.  Streaming may have typed partial
+        # text incrementally, or typing may have silently failed.  Always
+        # reconcile: if the final text differs from what was already typed,
+        # paste the complete result via clipboard (most reliable on Wayland).
+        if self.cfg.typing and processed_text:
+            typing_method = self.cfg.data.get("typing_method", "clipboard")
+            already_typed = self.last_typed_text or ""
 
-        if self.cfg.typing and processed_text and text_changed:
-            self.status_changed.emit("Correcting")
-            try:
-                # Use type_rewrite to backspace the raw text and replace with polished version
-                self.typer.type_rewrite(processed_text, self.last_typed_length)
-                self.last_typed_text = processed_text
-                self.last_typed_length = len(processed_text)
-                verbo(f"[streaming_core] Correction sweep applied: {self.last_typed_length} chars")
-            except Exception as e:
-                print(f"[streaming_core] Correction sweep failed: {e}")
-        elif self.cfg.typing and processed_text and not text_changed:
-            # Text unchanged — already typed incrementally, nothing to do
-            verbo("[streaming_core] No correction needed, text already typed")
+            if processed_text.strip() == already_typed.strip():
+                verbo("[streaming_core] No correction needed, text already typed")
+            else:
+                self.status_changed.emit("Typing")
+                try:
+                    if typing_method == "clipboard" or self.last_typed_length == 0:
+                        # Nothing was typed yet, or clipboard mode — just paste
+                        self.typer._paste(processed_text)
+                    else:
+                        # Partial text was typed incrementally — rewrite
+                        self.typer.type_rewrite(processed_text, self.last_typed_length)
+                    self.last_typed_text = processed_text
+                    self.last_typed_length = len(processed_text)
+                    verbo(f"[streaming_core] Final text output: {self.last_typed_length} chars")
+                except Exception as e:
+                    print(f"[streaming_core] Final typing failed: {e}")
         
         if self.cfg.perf_collect:
             from voxd.utils.performance import write_perf_entry
@@ -242,7 +252,8 @@ class StreamingCoreProcessThread(QThread):
         else:
             new_accumulated = text
         
-        if self.cfg.typing and self.typer:
+        typing_method = self.cfg.data.get("typing_method", "clipboard")
+        if self.cfg.typing and self.typer and typing_method != "clipboard":
             try:
                 self.typer.type_incremental(self.last_typed_text, new_accumulated)
                 self.last_typed_text = new_accumulated

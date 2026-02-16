@@ -5,7 +5,6 @@ import os
 import sys
 import select
 from voxd.utils.libw import verbo
-import pyperclip  # New: clipboard helper for instant paste
 from pathlib import Path
 
 def detect_backend():
@@ -57,9 +56,19 @@ class SimulatedTyper:
         self.tool = None
         self.enabled = self._detect_typing_tool()
         
-        # Ensure ydotool CLI uses the same user socket as our service
+        # Ensure ydotool CLI uses the same user socket as our service.
+        # Probe known locations even if YDOTOOL_SOCKET is set — the env var
+        # may point at a stale path (e.g. ~/.ydotool_socket from .bashrc when
+        # the daemon actually listens on /tmp/.ydotool_socket).
         if self.enabled and self.tool and os.path.basename(self.tool) == "ydotool":
-            os.environ.setdefault("YDOTOOL_SOCKET", str(Path.home() / ".ydotool_socket"))
+            current = os.environ.get("YDOTOOL_SOCKET", "")
+            if not current or not os.path.exists(current):
+                for candidate in ["/tmp/.ydotool_socket", str(Path.home() / ".ydotool_socket")]:
+                    if os.path.exists(candidate):
+                        os.environ["YDOTOOL_SOCKET"] = candidate
+                        break
+                else:
+                    os.environ["YDOTOOL_SOCKET"] = "/tmp/.ydotool_socket"
         
         # Check daemon status for ydotool and attempt auto-start if needed
         if self.enabled and not self._check_ydotool_daemon():
@@ -122,8 +131,7 @@ class SimulatedTyper:
         if not self.tool or "ydotool" not in os.path.basename(self.tool):
             return True
             
-        # Ensure consistent socket path for checks
-        os.environ.setdefault("YDOTOOL_SOCKET", str(Path.home() / ".ydotool_socket"))
+        # Socket path should already be corrected by __init__
         sock = os.environ.get("YDOTOOL_SOCKET")
         try:
             # Prefer a quick socket probe: if ydotool can talk, the daemon is usable
@@ -301,7 +309,7 @@ class SimulatedTyper:
         else:
             verbo(f"[typer] Typing transcript using {self.tool}...")
             if tool_name == "ydotool" and self.tool:
-                self._run_tool([self.tool, "type", "-d", self.delay_str, t])
+                self._run_tool([self.tool, "type", "--key-delay", self.delay_str, t])
             elif tool_name == "xdotool" and self.tool:
                 self._run_tool([self.tool, "type", "--delay", self.delay_str, t])
             else:
@@ -330,7 +338,7 @@ class SimulatedTyper:
 
             # Type this chunk
             if tool_name == "ydotool" and self.tool:
-                self._run_tool([self.tool, "type", "-d", self.delay_str, chunk])
+                self._run_tool([self.tool, "type", "--key-delay", self.delay_str, chunk])
             elif tool_name == "xdotool" and self.tool:
                 self._run_tool([self.tool, "type", "--delay", self.delay_str, chunk])
             else:
@@ -388,7 +396,7 @@ class SimulatedTyper:
         verbo(f"[typer] Typing incremental text: '{suffix[:20]}...' using {self.tool}...")
         tool_name = os.path.basename(self.tool) if self.tool else ""
         if tool_name == "ydotool" and self.tool:
-            self._run_tool([self.tool, "type", "-d", self.delay_str, suffix])
+            self._run_tool([self.tool, "type", "--key-delay", self.delay_str, suffix])
         elif tool_name == "xdotool" and self.tool:
             self._run_tool([self.tool, "type", "--delay", self.delay_str, suffix])
         else:
@@ -419,7 +427,7 @@ class SimulatedTyper:
             if previous_length > 0:
                 for _ in range(previous_length):
                     self._run_tool([self.tool, "key", "14:1", "14:0"])
-            self._run_tool([self.tool, "type", "-d", self.delay_str, text])
+            self._run_tool([self.tool, "type", "--key-delay", self.delay_str, text])
         elif tool_name == "xdotool" and self.tool:
             if previous_length > 0:
                 for _ in range(previous_length):
@@ -442,7 +450,7 @@ class SimulatedTyper:
                     t = t + " "
             except Exception:
                 pass
-            pyperclip.copy(t)
+            subprocess.run(["wl-copy", "--", t], stdin=subprocess.DEVNULL, timeout=5)
         except Exception as e:
             verbo(f"[typer] Clipboard copy failed: {e} – falling back to typing mode.")
             self._type_char_by_char(text)
@@ -470,16 +478,11 @@ class SimulatedTyper:
                     timeout=5
                 )
             elif "ydotool" in tool_name:
-                if use_ctrl_v:
-                    # Ctrl+V: Ctrl(29) + V(47)
-                    subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   timeout=5)
-                else:
-                    # Default Ctrl+Shift+V: Ctrl(29) + Shift(42) + V(47)
-                    subprocess.run(["ydotool", "key", "29:1", "42:1", "47:1", "47:0", "42:0", "29:0"],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   timeout=5)
+                # Use Shift+Insert for paste — works for both Ctrl+V and
+                # Ctrl+Shift+V targets and is compatible with all ydotool versions.
+                subprocess.run(["ydotool", "key", "shift+insert"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=5)
             else:
                 print(f"[typer] ⚠️ Paste shortcut not supported for tool: {self.tool}")
                 self._type_char_by_char(text)
@@ -517,7 +520,7 @@ class SimulatedTyper:
         verbo(f"[typer] Typing transcript character-by-character using {self.tool}...")
         tool_name = os.path.basename(self.tool) if self.tool else ""
         if tool_name == "ydotool" and self.tool:
-            self._run_tool([self.tool, "type", "-d", "10", t])  # Use 10ms delay for fallback
+            self._run_tool([self.tool, "type", "--key-delay", "10", t])  # Use 10ms delay for fallback
         elif tool_name == "xdotool" and self.tool:
             self._run_tool([self.tool, "type", "--delay", "10", t])  # Use 10ms delay for fallback
         else:
