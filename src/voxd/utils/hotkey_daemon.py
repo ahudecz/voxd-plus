@@ -135,7 +135,12 @@ class HotkeyDaemon:
             )
             return
 
-        tasks = [self._monitor_device(kb) for kb in keyboards]
+        # In PTT mode with suppress enabled, set up a UInput proxy so that
+        # the trigger key is consumed while all other keys pass through.
+        if self.mode == "ptt" and self.suppress_original:
+            tasks = [self._monitor_device_ptt_grab(kb) for kb in keyboards]
+        else:
+            tasks = [self._monitor_device(kb) for kb in keyboards]
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _monitor_device(self, device):
@@ -162,6 +167,54 @@ class HotkeyDaemon:
         except OSError:
             # Device disconnected
             verbo(f"[hotkeyd] Device disconnected: {device.name}")
+
+    async def _monitor_device_ptt_grab(self, device):
+        """Monitor with evdev grab — suppress trigger key, forward everything else.
+
+        Grabs the device for exclusive access and creates a UInput virtual
+        device that proxies all events *except* the trigger key.  This
+        prevents the held PTT key from reaching the focused application
+        (e.g. Page Down scrolling a text editor).
+        """
+        import evdev
+
+        try:
+            ui = evdev.UInput.from_device(device, name=f"voxd-proxy-{device.name}")
+        except Exception as e:
+            verr(f"[hotkeyd] Cannot create UInput proxy for {device.name}: {e} — "
+                 "falling back to non-grab mode")
+            await self._monitor_device(device)
+            return
+
+        try:
+            device.grab()
+            verbo(f"[hotkeyd] Grabbed {device.name} (PTT suppress)")
+        except Exception as e:
+            verr(f"[hotkeyd] Cannot grab {device.name}: {e} — "
+                 "falling back to non-grab mode")
+            ui.close()
+            await self._monitor_device(device)
+            return
+
+        try:
+            async for event in device.async_read_loop():
+                if not self._running:
+                    break
+                # Trigger key: consume (don't forward), handle PTT
+                if event.type == evdev.ecodes.EV_KEY and event.code == self.key_code:
+                    self._handle_ptt(event.value)
+                    continue
+                # Everything else: forward to virtual device
+                ui.write_event(event)
+                ui.syn()
+        except OSError:
+            verbo(f"[hotkeyd] Device disconnected: {device.name}")
+        finally:
+            try:
+                device.ungrab()
+            except Exception:
+                pass
+            ui.close()
 
     def _handle_double_tap(self, value: int):
         """Detect double-tap pattern (two quick key-up events)."""

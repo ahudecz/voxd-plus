@@ -50,6 +50,7 @@ class StreamingWhisperTranscriber:
         self.worker_thread: Optional[threading.Thread] = None
         self.is_running = False
         self.audio_buffer: list[np.ndarray] = []
+        self.full_audio: list[np.ndarray] = []  # ALL audio for final re-transcription
         self.samplerate = 16000
         self.channels = 1
 
@@ -83,6 +84,7 @@ class StreamingWhisperTranscriber:
         self.channels = channels
         self.is_running = True
         self.audio_buffer = []
+        self.full_audio = []
         self.accumulated_text = ""
         self.last_emitted_text = ""
         self.last_emitted_time = time.time()
@@ -99,11 +101,20 @@ class StreamingWhisperTranscriber:
         verbo("[streaming_transcriber] Started")
 
     def stop(self):
-        """Stop the streaming transcriber."""
+        """Stop the streaming transcriber.
+
+        Does NOT wait for the worker to finish — finalize() will
+        re-transcribe all audio anyway, so waiting is wasted time.
+        """
         self.is_running = False
-        if self.worker_thread and self.worker_thread.is_alive():
-            self.transcription_queue.put(None)
-            self.worker_thread.join(timeout=5.0)
+        # Drain queue so worker exits quickly
+        while not self.transcription_queue.empty():
+            try:
+                self.transcription_queue.get_nowait()
+            except queue.Empty:
+                break
+        self.transcription_queue.put(None)  # sentinel
+        # Don't join — let worker die on its own
         verbo("[streaming_transcriber] Stopped")
 
     def add_audio_chunk(self, audio_data: np.ndarray):
@@ -111,6 +122,7 @@ class StreamingWhisperTranscriber:
         if not self.is_running:
             return
 
+        self.full_audio.append(audio_data.copy())
         self.audio_buffer.append(audio_data.copy())
         concatenated = np.concatenate(self.audio_buffer, axis=0) if len(self.audio_buffer) > 1 else self.audio_buffer[0]
         total_frames = len(concatenated)
@@ -375,27 +387,41 @@ class StreamingWhisperTranscriber:
         return self.accumulated_text
     
     def finalize(self) -> str:
-        """Finalize transcription and return complete text."""
-        # Process any remaining chunks in the queue
+        """Re-transcribe the full recording for accurate final output.
+
+        Incremental chunks provide real-time feedback but each is transcribed
+        without context.  Here we send ALL captured audio through whisper in
+        one pass so it has full context, producing a much more accurate result.
+        """
+        # Drain the worker queue (discard — we'll re-transcribe everything)
         while not self.transcription_queue.empty():
             try:
-                audio_chunk = self.transcription_queue.get_nowait()
-                if audio_chunk is not None:
-                    self._transcribe_chunk(audio_chunk)
+                self.transcription_queue.get_nowait()
             except queue.Empty:
                 break
-        
-        # Process any remaining audio in buffer (only if it's substantial and not already processed)
-        if self.audio_buffer:
-            concatenated = np.concatenate(self.audio_buffer, axis=0)
-            # Only process if buffer has meaningful audio (at least 0.1 seconds)
-            min_final_frames = int(0.1 * self.samplerate)
-            if len(concatenated) >= min_final_frames:
-                verbo(f"[streaming_transcriber] Finalizing: processing remaining buffer ({len(concatenated)} frames, {len(concatenated)/self.samplerate:.2f}s)")
-                self._transcribe_chunk(concatenated)
-        
-        final_text = self.accumulated_text
+
+        if not self.full_audio:
+            verbo("[streaming_transcriber] Finalize: no audio captured")
+            return self.accumulated_text or ""
+
+        all_audio = np.concatenate(self.full_audio, axis=0)
+        duration = len(all_audio) / self.samplerate
+        verbo(f"[streaming_transcriber] Finalize: re-transcribing full audio "
+              f"({len(all_audio)} frames, {duration:.1f}s)")
+
+        temp_file = self._save_chunk_to_file(all_audio)
+        if temp_file is None:
+            verbo("[streaming_transcriber] Finalize: failed to save audio")
+            return self.accumulated_text or ""
+
+        tscript, _ = self.transcriber.transcribe(temp_file)
+        if tscript:
+            tscript = self._filter_blank_audio(tscript)
+
+        final_text = tscript.strip() if tscript else (self.accumulated_text or "")
+        verbo(f"[streaming_transcriber] Finalize result: '{final_text[:80]}...'")
+
         if self.on_final_text and final_text:
             self.on_final_text(final_text)
-        
+
         return final_text

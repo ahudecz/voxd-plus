@@ -354,13 +354,12 @@ class SimulatedTyper:
         verbo(f"[typer] Chunked typing completed: {len(text)} characters in {chunk_count} chunks")
 
     def type_incremental(self, previous_text: str, new_text: str):
-        """Type only the new text that wasn't in previous_text (append-only approach).
+        """Type only the new text that wasn't in previous_text (append-only).
 
-        This method calculates the suffix to append and types only that, avoiding
-        scary text replacements by never deleting existing text.
+        Uses clipboard paste for each suffix chunk so that keyboard layout
+        issues with ydotool direct typing are avoided.
         """
         if not self.enabled:
-            print("[typer] ⚠️ Typing disabled - required tool not available.")
             return
 
         if not new_text:
@@ -373,42 +372,26 @@ class SimulatedTyper:
             suffix = new_text[len(previous_text):]
             if not suffix:
                 return
-            # Preserve leading space if it exists (needed for proper sentence spacing)
-            if suffix.startswith(" "):
-                # Keep the space
-                pass
-            else:
-                # Remove any other leading whitespace but preserve intentional spaces
+            if not suffix.startswith(" "):
                 suffix = suffix.lstrip()
         else:
-            # For non-matching text, preserve leading space if present
-            if new_text.startswith(" "):
-                suffix = new_text
-            else:
-                suffix = new_text.lstrip()
+            suffix = new_text.lstrip() if not new_text.startswith(" ") else new_text
 
         if not suffix:
             return
 
-        if self.delay_ms <= 0 or not self.tool:
-            return
-
-        verbo(f"[typer] Typing incremental text: '{suffix[:20]}...' using {self.tool}...")
-        tool_name = os.path.basename(self.tool) if self.tool else ""
-        if tool_name == "ydotool" and self.tool:
-            self._run_tool([self.tool, "type", "--key-delay", self.delay_str, suffix])
-        elif tool_name == "xdotool" and self.tool:
-            self._run_tool([self.tool, "type", "--delay", self.delay_str, suffix])
-        else:
-            print("[typer] ⚠️ No valid typing tool found for incremental typing.")
-            return
+        verbo(f"[typer] Typing incremental text via clipboard paste: '{suffix[:30]}...'")
+        self._paste_raw(suffix)
 
     def type_rewrite(self, text: str, previous_length: int):
-        """Rewrite text by deleting previous characters and typing new text.
+        """Rewrite text by deleting previous characters and pasting new text.
+
+        Sends batched backspaces to delete the old text, then uses clipboard
+        paste for the replacement (avoids ydotool encoding artefacts).
 
         Args:
-            text: The new text to type
-            previous_length: Number of characters to delete before typing new text
+            text: The new text to paste
+            previous_length: Number of characters to delete before pasting
         """
         if not self.enabled:
             print("[typer] ⚠️ Typing disabled - required tool not available.")
@@ -417,25 +400,24 @@ class SimulatedTyper:
         if not text:
             return
 
-        if self.delay_ms <= 0 or not self.tool:
-            return
-
-        verbo(f"[typer] Rewriting text: deleting {previous_length} chars, typing '{text[:20]}...' using {self.tool}...")
+        verbo(f"[typer] Rewriting text: deleting {previous_length} chars, pasting '{text[:20]}...'")
         tool_name = os.path.basename(self.tool) if self.tool else ""
 
-        if tool_name == "ydotool" and self.tool:
-            if previous_length > 0:
-                for _ in range(previous_length):
-                    self._run_tool([self.tool, "key", "14:1", "14:0"])
-            self._run_tool([self.tool, "type", "--key-delay", self.delay_str, text])
-        elif tool_name == "xdotool" and self.tool:
-            if previous_length > 0:
-                for _ in range(previous_length):
-                    self._run_tool([self.tool, "key", "BackSpace"])
-            self._run_tool([self.tool, "type", "--delay", self.delay_str, text])
-        else:
-            print("[typer] ⚠️ No valid typing tool found for rewrite.")
-            return
+        # Select old text backwards, then paste to replace the selection.
+        # Much faster than individual backspaces.
+        if previous_length > 0:
+            if "ydotool" in tool_name and self.tool:
+                self._run_tool([self.tool, "key", "--key-delay", "0",
+                                "--repeat", str(previous_length), "shift+Left"])
+            elif "xdotool" in tool_name and self.tool:
+                self._run_tool([self.tool, "key", "--repeat", str(previous_length),
+                                "shift+Left"])
+            else:
+                print("[typer] ⚠️ No valid typing tool found for rewrite.")
+                return
+
+        # Paste replaces the selection (or just inserts if nothing selected)
+        self._paste(text)
 
     # ------------------------------------------------------------------
     # Helper: fast clipboard paste
@@ -494,6 +476,33 @@ class SimulatedTyper:
             print(f"[typer] ⚠️ Paste operation failed: {e}")
 
         self.flush_stdin()
+
+    def _paste_raw(self, text: str):
+        """Lightweight clipboard paste for incremental streaming chunks.
+
+        Skips trailing-space logic and start_delay so that chunks appear
+        immediately during real-time transcription.
+        """
+        try:
+            subprocess.run(["wl-copy", "--", text], stdin=subprocess.DEVNULL, timeout=5)
+        except Exception as e:
+            verbo(f"[typer] Incremental clipboard copy failed: {e}")
+            return
+
+        time.sleep(0.05)
+
+        try:
+            tool_name = os.path.basename(self.tool) if self.tool else ""
+            if "ydotool" in tool_name:
+                subprocess.run(["ydotool", "key", "shift+insert"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=5)
+            elif "xdotool" in tool_name:
+                subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=5)
+        except Exception as e:
+            verbo(f"[typer] Incremental paste failed: {e}")
 
     def _type_char_by_char(self, text: str):
         """Fallback method to type character by character without recursion"""

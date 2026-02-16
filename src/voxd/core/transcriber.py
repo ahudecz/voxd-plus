@@ -65,11 +65,17 @@ class WhisperTranscriber:
         output_prefix = self.output_dir / audio_file.stem
         output_txt = output_prefix.with_suffix(".txt")
 
+        # Optimal thread count: ~10-12 on modern CPUs (beyond that, cache
+        # contention makes it slower).  Cap at physical core count / 2.
+        cpu_count = os.cpu_count() or 4
+        n_threads = min(12, max(4, cpu_count // 2))
+
         cmd = [
             self.binary_path,
             "-m", self.model_path,
             "-f", str(audio_file),
             "-l", self.language,
+            "-t", str(n_threads),
             "-of", str(self.output_dir / audio_file.stem),
             "-otxt"  # <-- THIS is necessary to actually generate the .txt file
         ]

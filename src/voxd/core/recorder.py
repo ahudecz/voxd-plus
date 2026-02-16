@@ -117,16 +117,16 @@ class AudioRecorder:
             return None
 
         verbo("[recorder] Stopping recording...")
-        self.is_recording = False  # Signal callbacks to stop accepting new data
 
-        # Allow in-flight audio frames to be delivered
-        # Audio stacks can buffer 500ms-1.5s (sounddevice + PulseAudio/PipeWire + device)
-        import time
-        time.sleep(1.0)
-
+        # Stop the stream FIRST while is_recording is still True so
+        # in-flight audio callbacks can still buffer data.  stream.stop()
+        # waits for the current sounddevice block to finish, which
+        # handles the flush — no extra sleep needed.
         if hasattr(self, 'stream') and self.stream is not None:
             self.stream.stop()
             self.stream.close()
+
+        self.is_recording = False
 
         # Emit remaining streaming buffer before clearing (streaming mode only)
         if hasattr(self, 'streaming_buffer') and self.streaming_buffer:

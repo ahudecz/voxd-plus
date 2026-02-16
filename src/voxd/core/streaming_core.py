@@ -174,30 +174,14 @@ class StreamingCoreProcessThread(QThread):
             except Exception as e:
                 verr(f"[streaming_core] Clipboard copy failed: {e}")
 
-        # Ensure the full text is output.  Streaming may have typed partial
-        # text incrementally, or typing may have silently failed.  Always
-        # reconcile: if the final text differs from what was already typed,
-        # paste the complete result via clipboard (most reliable on Wayland).
+        # Single clipboard paste of the full re-transcribed text.
         if self.cfg.typing and processed_text:
-            typing_method = self.cfg.data.get("typing_method", "clipboard")
-            already_typed = self.last_typed_text or ""
-
-            if processed_text.strip() == already_typed.strip():
-                verbo("[streaming_core] No correction needed, text already typed")
-            else:
-                self.status_changed.emit("Typing")
-                try:
-                    if typing_method == "clipboard" or self.last_typed_length == 0:
-                        # Nothing was typed yet, or clipboard mode — just paste
-                        self.typer._paste(processed_text)
-                    else:
-                        # Partial text was typed incrementally — rewrite
-                        self.typer.type_rewrite(processed_text, self.last_typed_length)
-                    self.last_typed_text = processed_text
-                    self.last_typed_length = len(processed_text)
-                    verbo(f"[streaming_core] Final text output: {self.last_typed_length} chars")
-                except Exception as e:
-                    print(f"[streaming_core] Final typing failed: {e}")
+            self.status_changed.emit("Typing")
+            try:
+                self.typer._paste(processed_text)
+                verbo(f"[streaming_core] Final text output: {len(processed_text)} chars")
+            except Exception as e:
+                print(f"[streaming_core] Final typing failed: {e}")
         
         if self.cfg.perf_collect:
             from voxd.utils.performance import write_perf_entry
@@ -252,15 +236,7 @@ class StreamingCoreProcessThread(QThread):
         else:
             new_accumulated = text
         
-        typing_method = self.cfg.data.get("typing_method", "clipboard")
-        if self.cfg.typing and self.typer and typing_method != "clipboard":
-            try:
-                self.typer.type_incremental(self.last_typed_text, new_accumulated)
-                self.last_typed_text = new_accumulated
-                self.last_typed_length = len(new_accumulated)
-                verbo(f"[streaming_core] Typed incremental text, total length: {len(new_accumulated)}")
-            except Exception as e:
-                verr(f"[streaming_core] Incremental typing failed: {e}")
+        # No incremental typing — final paste after release is more reliable
         
         self.accumulated_text = new_accumulated
     
