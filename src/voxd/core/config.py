@@ -61,6 +61,10 @@ DEFAULT_CONFIG = {
     "mic_autoset_level": 0.45,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "whisper_model_path": "whisper.cpp/models/ggml-base.en.bin",
+    "whisper_prompt": "",              # Vocabulary hints for whisper (e.g. "ChatGPT, Claude Code, Anthropic")
+    "whisper_beam_size": 5,            # Beam search size (higher = more accurate but slower)
+    "whisper_server_enabled": True,    # Use persistent whisper-server for fast transcription
+    "whisper_server_port": 8178,       # Port for whisper-server (default: 8178, avoids llama-server 8080)
     "language": "en",
     # GPU settings
     "gpu_enabled": True,  # Enable GPU acceleration if available
@@ -173,6 +177,9 @@ DEFAULT_CONFIG = {
     # --- Hotkey daemon --------------------------------------------------------
     "hotkey_daemon_enabled": False,
     "hotkey_trigger_key": "KEY_CAPSLOCK",
+    "hotkey_trigger_key_2": "",                # Second PTT key (empty = disabled)
+    "hotkey_trigger_key_2_lang": "hu",         # Language for key 2 transcription (e.g. "hu", "de", "fr")
+    "hotkey_trigger_key_2_whisper_prompt": "Szia, ez egy magyar nyelvű diktálás. Kérlek, pontosan írd le, amit mondok.",  # Whisper prompt for key 2
     "hotkey_mode": "double_tap",       # double_tap | hold | single | ptt
     "hotkey_double_tap_window_ms": 350,
     "hotkey_hold_threshold_ms": 300,
@@ -186,8 +193,8 @@ DEFAULT_CONFIG = {
     "flux_typing_cooldown_boost_db": 6.0,  # Raise start threshold during cooldown
 
     "aipp_prompts": {
-        "default": "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text.",
-        "prompt1": "Interpret the following text to the best of your ability as a C programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding C code.",
+        "default": "Fix any speech-to-text transcription errors in the following text. Correct misheard words, proper nouns, and technical terms. Remove filler words (um, uh, er, hmm, like) and false starts. Keep the speaker's original phrasing and meaning — do not rewrite, summarize, or add commentary. Output only the corrected text.",
+        "prompt1": "Translate the following English speech-to-text transcript into natural Hungarian. Fix any transcription errors before translating. Remove filler words. Output only the Hungarian translation, nothing else.",
         "prompt2": "Interpret the following text to the best of your ability as a Python programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding Python code.",
         "prompt3": "Rewrite the following text as a three-verse poem.",
     }

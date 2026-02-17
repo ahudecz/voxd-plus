@@ -70,6 +70,8 @@ class HotkeyDaemon:
     def __init__(
         self,
         trigger_key: str = "KEY_CAPSLOCK",
+        trigger_key_2: str = "",
+        trigger_key_2_lang: str = "hu",
         mode: str = "double_tap",
         double_tap_window_ms: int = 350,
         hold_threshold_ms: int = 300,
@@ -78,6 +80,14 @@ class HotkeyDaemon:
     ):
         self.trigger_key = trigger_key
         self.key_code = _resolve_key_code(trigger_key)
+        self.trigger_key_2 = trigger_key_2
+        self.trigger_key_2_lang = trigger_key_2_lang
+        self.key_code_2: Optional[int] = None
+        if trigger_key_2:
+            try:
+                self.key_code_2 = _resolve_key_code(trigger_key_2)
+            except ValueError as e:
+                verr(f"[hotkeyd] Second trigger key invalid: {e}")
         self.mode = mode
         self.double_tap_window = double_tap_window_ms / 1000.0
         self.hold_threshold = hold_threshold_ms / 1000.0
@@ -105,6 +115,9 @@ class HotkeyDaemon:
         self._running = True
         print(f"[hotkeyd] Listening for {self.mode} on {self.trigger_key} "
               f"(code={self.key_code})")
+        if self.key_code_2 is not None:
+            print(f"[hotkeyd] Second PTT key: {self.trigger_key_2} "
+                  f"(code={self.key_code_2}, lang={self.trigger_key_2_lang})")
         print(f"[hotkeyd] IPC target: {self.socket_path}")
 
         try:
@@ -140,16 +153,21 @@ class HotkeyDaemon:
         # Only grab devices that actually have the trigger keycode — avoids
         # grabbing touchpads, mice, and other devices that can never produce
         # the trigger key.
+        # Collect all trigger key codes that need grab suppression
+        _grab_codes = {self.key_code}
+        if self.key_code_2 is not None:
+            _grab_codes.add(self.key_code_2)
+
         if self.mode == "ptt" and self.suppress_original:
             tasks = []
             for dev in key_devices:
                 caps = dev.capabilities(verbose=False)
                 key_caps = caps.get(1, [])  # EV_KEY codes
-                if self.key_code in key_caps:
+                if _grab_codes & set(key_caps):
                     tasks.append(self._monitor_device_ptt_grab(dev))
                 else:
                     verbo(f"[hotkeyd] Skipping grab for {dev.name} "
-                          f"(no keycode {self.key_code})")
+                          f"(no trigger keycodes)")
                     tasks.append(self._monitor_device(dev))
         else:
             tasks = [self._monitor_device(kb) for kb in key_devices]
@@ -165,6 +183,12 @@ class HotkeyDaemon:
                     break
                 if event.type != evdev.ecodes.EV_KEY:
                     continue
+
+                # Second trigger key (always PTT mode)
+                if self.key_code_2 is not None and event.code == self.key_code_2:
+                    self._handle_ptt_2(event.value)
+                    continue
+
                 if event.code != self.key_code:
                     continue
 
@@ -212,10 +236,15 @@ class HotkeyDaemon:
             async for event in device.async_read_loop():
                 if not self._running:
                     break
-                # Trigger key: consume (don't forward), handle PTT
-                if event.type == evdev.ecodes.EV_KEY and event.code == self.key_code:
-                    self._handle_ptt(event.value)
-                    continue
+                if event.type == evdev.ecodes.EV_KEY:
+                    # Primary trigger key: consume (don't forward), handle PTT
+                    if event.code == self.key_code:
+                        self._handle_ptt(event.value)
+                        continue
+                    # Second trigger key: consume, handle PTT with prompt
+                    if self.key_code_2 is not None and event.code == self.key_code_2:
+                        self._handle_ptt_2(event.value)
+                        continue
                 # Everything else: forward to virtual device as-is.
                 # Do NOT inject extra SYN_REPORT — let the original
                 # SYN events flow through to preserve multi-axis frame
@@ -265,6 +294,16 @@ class HotkeyDaemon:
             self._send_ipc(b"stop_record")
             verbo("[hotkeyd] PTT key up — stop_record sent")
 
+    def _handle_ptt_2(self, value: int):
+        """Push-to-talk for second key: sends lang-tagged IPC commands."""
+        lang = self.trigger_key_2_lang
+        if value == 1:  # key down
+            self._send_ipc(f"start_record:{lang}".encode())
+            verbo(f"[hotkeyd] PTT key2 down — start_record:{lang} sent")
+        elif value == 0:  # key up
+            self._send_ipc(f"stop_record:{lang}".encode())
+            verbo(f"[hotkeyd] PTT key2 up — stop_record:{lang} sent")
+
     def _fire_trigger(self):
         """Send trigger_record to VOXD's IPC socket."""
         self._send_ipc(b"trigger_record")
@@ -297,6 +336,8 @@ class HotkeyDaemon:
 def run_hotkey_daemon(cfg=None):
     """Start the hotkey daemon using config values (or defaults)."""
     trigger_key = "KEY_CAPSLOCK"
+    trigger_key_2 = ""
+    trigger_key_2_lang = "hu"
     mode = "double_tap"
     double_tap_window_ms = 350
     hold_threshold_ms = 300
@@ -304,6 +345,8 @@ def run_hotkey_daemon(cfg=None):
 
     if cfg is not None:
         trigger_key = cfg.data.get("hotkey_trigger_key", trigger_key)
+        trigger_key_2 = cfg.data.get("hotkey_trigger_key_2", trigger_key_2)
+        trigger_key_2_lang = cfg.data.get("hotkey_trigger_key_2_lang", trigger_key_2_lang)
         mode = cfg.data.get("hotkey_mode", mode)
         double_tap_window_ms = int(cfg.data.get("hotkey_double_tap_window_ms", double_tap_window_ms))
         hold_threshold_ms = int(cfg.data.get("hotkey_hold_threshold_ms", hold_threshold_ms))
@@ -311,6 +354,8 @@ def run_hotkey_daemon(cfg=None):
 
     daemon = HotkeyDaemon(
         trigger_key=trigger_key,
+        trigger_key_2=trigger_key_2,
+        trigger_key_2_lang=trigger_key_2_lang,
         mode=mode,
         double_tap_window_ms=double_tap_window_ms,
         hold_threshold_ms=hold_threshold_ms,

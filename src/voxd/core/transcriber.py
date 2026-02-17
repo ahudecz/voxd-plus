@@ -61,14 +61,23 @@ class WhisperTranscriber:
         if not audio_file.exists():
             raise FileNotFoundError(f"[transcriber] Audio file not found: {audio_file}")
 
+        # Try whisper-server first (model stays in RAM = much faster)
+        if self.cfg and self.cfg.data.get("whisper_server_enabled", True):
+            result = self._transcribe_via_server(audio_file)
+            if result is not None:
+                return result
+
         # Output prefix (no extension!)
         output_prefix = self.output_dir / audio_file.stem
         output_txt = output_prefix.with_suffix(".txt")
 
-        # Optimal thread count: ~10-12 on modern CPUs (beyond that, cache
-        # contention makes it slower).  Cap at physical core count / 2.
+        # Thread count: GPU offloads inference so CPU threads only handle
+        # pre/post-processing — 4 is enough.  For CPU-only, use more.
         cpu_count = os.cpu_count() or 4
-        n_threads = min(12, max(4, cpu_count // 2))
+        if self.device == "cuda":
+            n_threads = 4
+        else:
+            n_threads = min(12, max(4, cpu_count // 2))
 
         cmd = [
             self.binary_path,
@@ -76,9 +85,24 @@ class WhisperTranscriber:
             "-f", str(audio_file),
             "-l", self.language,
             "-t", str(n_threads),
+            "-np",   # suppress progress/timestamp prints
             "-of", str(self.output_dir / audio_file.stem),
-            "-otxt"  # <-- THIS is necessary to actually generate the .txt file
+            "-otxt",
         ]
+
+        # Flash attention: major GPU speedup (2-3×)
+        if self.device == "cuda":
+            cmd.append("-fa")
+
+        # Whisper vocabulary hints (--prompt)
+        whisper_prompt = (self.cfg.data.get("whisper_prompt", "") if self.cfg else "").strip()
+        if whisper_prompt:
+            cmd.extend(["--prompt", whisper_prompt])
+
+        # Beam search size (-bs)
+        beam_size = int(self.cfg.data.get("whisper_beam_size", 5) if self.cfg else 5)
+        if beam_size != 5:
+            cmd.extend(["-bs", str(beam_size)])
 
         # GPU handling: new whisper.cpp has GPU on by default, use --no-gpu to disable
         if self.device == "cpu":
@@ -118,6 +142,47 @@ class WhisperTranscriber:
                 verr(f"[transcriber] Could not delete input file: {e}")
 
         return self._parse_transcript(output_txt)
+
+    def _transcribe_via_server(self, audio_file: Path):
+        """Try to transcribe via whisper-server HTTP API.
+
+        Returns (text, original_text) tuple on success, or None to fall back
+        to subprocess.
+        """
+        try:
+            from voxd.core.whisper_server_manager import get_whisper_server_manager
+            mgr = get_whisper_server_manager()
+
+            # Only use server if process is alive
+            if not mgr.is_process_alive():
+                return None
+
+            whisper_prompt = (self.cfg.data.get("whisper_prompt", "") if self.cfg else "").strip()
+            text = mgr.transcribe(str(audio_file), language=self.language, prompt=whisper_prompt)
+            if text is None:
+                return None
+
+            verbo(f"[transcriber] Server transcription: '{text[:80]}...'")
+
+            # Delete input if configured
+            if self.delete_input:
+                try:
+                    audio_file.unlink()
+                    verbo(f"[transcriber] Deleted input file: {audio_file}")
+                except Exception as e:
+                    verr(f"[transcriber] Could not delete input file: {e}")
+
+            # Strip timestamps and normalize whitespace (same as _parse_transcript)
+            tscript = re.sub(r"\[\d{2}:\d{2}[\.:]\d{3}\]|\(\d{2}:\d{2}\)", "", text)
+            tscript = re.sub(r"\s+", " ", tscript).strip()
+
+            return tscript, text
+
+        except ImportError:
+            return None
+        except Exception as e:
+            verr(f"[transcriber] Server transcription failed: {e}")
+            return None
 
     def _parse_transcript(self, path: Path):
         try:

@@ -254,6 +254,62 @@ def find_llamacpp_model_by_name(model_name: str) -> Path | None:
     return None
 
 # ─────────────────────────────────────────────────────────────────────────────
+# whisper-server resolver
+# ---------------------------------------------------------------------------
+
+def _locate_whisper_server() -> Path:
+    """Return an absolute Path to whisper-server.
+
+    Order (first hit wins):
+      1. $VOXD_WHISPER_SERVER_BIN – explicit override
+      2. Same directory as whisper-cli (e.g. ~/.local/share/voxd/bin/)
+      3. Repo-local build → whisper.cpp/build/bin/whisper-server
+      4. First executable named whisper-server found on $PATH
+
+    Raises FileNotFoundError if nothing is found.
+    """
+    # 1. Environment override
+    env = os.getenv("VOXD_WHISPER_SERVER_BIN")
+    if env:
+        p = Path(env).expanduser().resolve()
+        if p.is_file():
+            return p
+
+    # 2. Next to whisper-cli (common install location)
+    try:
+        cli_path = _locate_whisper_cli()
+        sibling = cli_path.parent / "whisper-server"
+        if sibling.is_file() and os.access(str(sibling), os.X_OK):
+            return sibling
+    except FileNotFoundError:
+        pass
+
+    # 3. Repo-local build
+    repo_candidate = (
+        Path(__file__).parents[2]
+        / "whisper.cpp" / "build" / "bin" / "whisper-server"
+    )
+    if repo_candidate.is_file():
+        return repo_candidate
+
+    # 4. Anything on $PATH
+    which = shutil.which("whisper-server")
+    if which:
+        return Path(which).resolve()
+
+    raise FileNotFoundError(
+        "Could not locate whisper-server. "
+        "Checked $VOXD_WHISPER_SERVER_BIN, whisper-cli sibling dir, repo-local build and $PATH."
+    )
+
+
+@lru_cache(maxsize=1)
+def whisper_server() -> Path:
+    """Return an absolute Path to whisper-server (raises if not found)."""
+    return _locate_whisper_server()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Whisper base model discovery
 # ---------------------------------------------------------------------------
 

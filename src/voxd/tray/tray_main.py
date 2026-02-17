@@ -134,10 +134,21 @@ class VoxdTrayApp(QObject):
         self._begin_recording()
 
     # ── PTT helpers ──────────────────────────────────────────────────────
-    def ptt_start_recording(self):
-        """Start recording only (PTT key-down). No-op if already recording."""
+    def _ipc_ptt_start(self):
+        """Called from IPC via QTimer — reads prompt key from _pending_prompt_key."""
+        pk = getattr(self, "_pending_prompt_key", None)
+        self._pending_prompt_key = None
+        self.ptt_start_recording(prompt_key=pk)
+
+    def ptt_start_recording(self, prompt_key=None):
+        """Start recording only (PTT key-down). No-op if already recording.
+
+        When *prompt_key* is given (e.g. "prompt1"), that AIPP prompt slot
+        will be used for this recording session instead of the default.
+        """
         if self.status != "VOXD":
             return
+        self._prompt_override = prompt_key
         self._begin_recording()
 
     def ptt_stop_recording(self):
@@ -151,6 +162,31 @@ class VoxdTrayApp(QObject):
         """Shared logic for starting a new recording session."""
         if self.status in ("Transcribing", "Typing"):
             return
+
+        # Apply language override from PTT key 2
+        lang_override = getattr(self, "_prompt_override", None)
+        self._saved_language = None
+        self._saved_model_path = None
+        self._saved_whisper_prompt = None
+        if lang_override:
+            self._saved_language = self.cfg.data.get("language")
+            self._saved_model_path = self.cfg.data.get("whisper_model_path")
+            self._saved_whisper_prompt = self.cfg.data.get("whisper_prompt")
+            self.cfg.data["language"] = lang_override
+            self.cfg.language = lang_override
+            # Apply language-specific whisper prompt
+            key2_prompt = self.cfg.data.get("hotkey_trigger_key_2_whisper_prompt", "")
+            if key2_prompt:
+                self.cfg.data["whisper_prompt"] = key2_prompt
+            # Switch to multilingual model if current model is English-only
+            cur_model = self.cfg.data.get("whisper_model_path", "")
+            if cur_model.endswith(".en.bin"):
+                multi_model = cur_model.replace(".en.bin", ".bin")
+                import os
+                if os.path.isfile(multi_model):
+                    self.cfg.data["whisper_model_path"] = multi_model
+                    self.cfg.whisper_model_path = multi_model
+
         self.set_status("Recording")
         if self.cfg.data.get("streaming_enabled", True):
             self.thread = StreamingCoreProcessThread(self.cfg, self.logger)
@@ -169,6 +205,20 @@ class VoxdTrayApp(QObject):
         self.thread.start()
 
     def on_transcript_ready(self, tscript):
+        # Restore language/model overrides from PTT key 2
+        if getattr(self, "_saved_language", None) is not None:
+            self.cfg.data["language"] = self._saved_language
+            self.cfg.language = self._saved_language
+        if getattr(self, "_saved_model_path", None) is not None:
+            self.cfg.data["whisper_model_path"] = self._saved_model_path
+            self.cfg.whisper_model_path = self._saved_model_path
+        if getattr(self, "_saved_whisper_prompt", None) is not None:
+            self.cfg.data["whisper_prompt"] = self._saved_whisper_prompt
+        self._saved_language = None
+        self._saved_model_path = None
+        self._saved_whisper_prompt = None
+        self._prompt_override = None
+
         if tscript:
             self.last_transcript = tscript
             # Optionally, show a notification here
@@ -348,13 +398,22 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     tray_app = VoxdTrayApp()
 
+    # Start whisper-server in background (keeps model in RAM for fast transcription)
+    if tray_app.cfg.data.get("whisper_server_enabled", True):
+        try:
+            from voxd.core.whisper_server_manager import ensure_whisper_server_running
+            ensure_whisper_server_running(tray_app.cfg)
+        except Exception:
+            pass
+
     def on_ipc_trigger():
         QTimer.singleShot(0, tray_app.toggle_recording)
 
-    def on_ipc_start():
-        QTimer.singleShot(0, tray_app.ptt_start_recording)
+    def on_ipc_start(prompt_key=None):
+        tray_app._pending_prompt_key = prompt_key
+        QTimer.singleShot(0, tray_app._ipc_ptt_start)
 
-    def on_ipc_stop():
+    def on_ipc_stop(prompt_key=None):
         QTimer.singleShot(0, tray_app.ptt_stop_recording)
 
     start_ipc_server(on_ipc_trigger, start_callback=on_ipc_start, stop_callback=on_ipc_stop)

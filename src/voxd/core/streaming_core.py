@@ -129,16 +129,16 @@ class StreamingCoreProcessThread(QThread):
         self.recording_stopped.emit()  # Signal for overlay
         recorder.stop_recording(preserve=False)
         transcriber.stop()
-        
+
         final_text = transcriber.finalize()
-        
+
         if not final_text:
             self.finished.emit("")
             return
-        
+
         trans_start_ts = time()
         trans_end_ts = time()
-        
+
         aipp_start_ts = aipp_end_ts = None
 
         # Detect focused app for context-aware formatting
