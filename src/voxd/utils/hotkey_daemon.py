@@ -119,15 +119,15 @@ class HotkeyDaemon:
         import evdev
 
         devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-        # Filter for keyboard devices (those that have EV_KEY capability)
-        keyboards = []
+        # Filter for devices that have EV_KEY capability
+        key_devices = []
         for dev in devices:
             caps = dev.capabilities(verbose=False)
             if 1 in caps:  # EV_KEY = 1
-                keyboards.append(dev)
+                key_devices.append(dev)
                 verbo(f"[hotkeyd] Monitoring: {dev.name} ({dev.path})")
 
-        if not keyboards:
+        if not key_devices:
             verr(
                 "[hotkeyd] No keyboard devices found. "
                 "Ensure you are in the 'input' group: "
@@ -137,10 +137,22 @@ class HotkeyDaemon:
 
         # In PTT mode with suppress enabled, set up a UInput proxy so that
         # the trigger key is consumed while all other keys pass through.
+        # Only grab devices that actually have the trigger keycode — avoids
+        # grabbing touchpads, mice, and other devices that can never produce
+        # the trigger key.
         if self.mode == "ptt" and self.suppress_original:
-            tasks = [self._monitor_device_ptt_grab(kb) for kb in keyboards]
+            tasks = []
+            for dev in key_devices:
+                caps = dev.capabilities(verbose=False)
+                key_caps = caps.get(1, [])  # EV_KEY codes
+                if self.key_code in key_caps:
+                    tasks.append(self._monitor_device_ptt_grab(dev))
+                else:
+                    verbo(f"[hotkeyd] Skipping grab for {dev.name} "
+                          f"(no keycode {self.key_code})")
+                    tasks.append(self._monitor_device(dev))
         else:
-            tasks = [self._monitor_device(kb) for kb in keyboards]
+            tasks = [self._monitor_device(kb) for kb in key_devices]
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _monitor_device(self, device):
@@ -204,9 +216,11 @@ class HotkeyDaemon:
                 if event.type == evdev.ecodes.EV_KEY and event.code == self.key_code:
                     self._handle_ptt(event.value)
                     continue
-                # Everything else: forward to virtual device
+                # Everything else: forward to virtual device as-is.
+                # Do NOT inject extra SYN_REPORT — let the original
+                # SYN events flow through to preserve multi-axis frame
+                # integrity (critical for touchpads/mice).
                 ui.write_event(event)
-                ui.syn()
         except OSError:
             verbo(f"[hotkeyd] Device disconnected: {device.name}")
         finally:
