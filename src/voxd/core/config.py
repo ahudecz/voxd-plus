@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     "streaming_typing_delay": 0.01,
     "streaming_min_chars_to_type": 3,
     # Overlay and audio cues
-    "overlay_enabled": True,  # Show waveform overlay during recording
+    "overlay_enabled": False,  # Show waveform overlay during recording
     "audio_cues_enabled": True,  # Play audio cues on start/stop
     "audio_cue_on_success": False,  # Play success chime after transcription
     "audio_cue_volume": 0.3,  # Volume level 0.0-1.0
@@ -177,9 +177,11 @@ DEFAULT_CONFIG = {
     # --- Hotkey daemon --------------------------------------------------------
     "hotkey_daemon_enabled": False,
     "hotkey_trigger_key": "KEY_CAPSLOCK",
-    "hotkey_trigger_key_2": "",                # Second PTT key (empty = disabled)
-    "hotkey_trigger_key_2_lang": "hu",         # Language for key 2 transcription (e.g. "hu", "de", "fr")
-    "hotkey_trigger_key_2_whisper_prompt": "Szia, ez egy magyar nyelvű diktálás. Kérlek, pontosan írd le, amit mondok.",  # Whisper prompt for key 2
+    "hotkey_trigger_key_modifier": "",                # Modifier for trigger key (e.g. "KEY_LEFTCTRL", empty = none)
+    "hotkey_trigger_key_2": "",                       # Second PTT key (empty = disabled)
+    "hotkey_trigger_key_2_modifier": "",              # Modifier for trigger key 2 (empty = none)
+    "hotkey_trigger_key_2_lang": "hu",                # Language for key 2 transcription
+    "hotkey_trigger_key_2_whisper_prompt": "Szia, ez egy magyar nyelvű diktálás. Kérlek, pontosan írd le, amit mondok.",
     "hotkey_mode": "double_tap",       # double_tap | hold | single | ptt
     "hotkey_double_tap_window_ms": 350,
     "hotkey_hold_threshold_ms": 300,

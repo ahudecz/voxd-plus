@@ -27,7 +27,10 @@ from voxd.utils.libw import verbo, verr
 
 _KEY_CODES: dict[str, int] = {
     "KEY_CAPSLOCK": 58,
+    "KEY_LEFTCTRL": 29,
     "KEY_RIGHTCTRL": 97,
+    "KEY_LEFTSHIFT": 42,
+    "KEY_RIGHTSHIFT": 54,
     "KEY_LEFTMETA": 125,
     "KEY_RIGHTMETA": 126,
     "KEY_RIGHTALT": 100,
@@ -70,7 +73,9 @@ class HotkeyDaemon:
     def __init__(
         self,
         trigger_key: str = "KEY_CAPSLOCK",
+        trigger_key_modifier: str = "",
         trigger_key_2: str = "",
+        trigger_key_2_modifier: str = "",
         trigger_key_2_lang: str = "hu",
         mode: str = "double_tap",
         double_tap_window_ms: int = 350,
@@ -80,7 +85,21 @@ class HotkeyDaemon:
     ):
         self.trigger_key = trigger_key
         self.key_code = _resolve_key_code(trigger_key)
+        self.trigger_key_modifier = trigger_key_modifier
+        self.modifier_code: Optional[int] = None
+        if trigger_key_modifier:
+            try:
+                self.modifier_code = _resolve_key_code(trigger_key_modifier)
+            except ValueError as e:
+                verr(f"[hotkeyd] Modifier key invalid: {e}")
         self.trigger_key_2 = trigger_key_2
+        self.trigger_key_2_modifier = trigger_key_2_modifier
+        self.modifier_code_2: Optional[int] = None
+        if trigger_key_2_modifier:
+            try:
+                self.modifier_code_2 = _resolve_key_code(trigger_key_2_modifier)
+            except ValueError as e:
+                verr(f"[hotkeyd] Modifier key 2 invalid: {e}")
         self.trigger_key_2_lang = trigger_key_2_lang
         self.key_code_2: Optional[int] = None
         if trigger_key_2:
@@ -100,6 +119,8 @@ class HotkeyDaemon:
         self._last_tap_time: float = 0.0
         self._hold_start: float = 0.0
         self._running = False
+        # Modifier key held state (shared across devices)
+        self._modifier_held: set[int] = set()
 
     def run(self):
         """Start the daemon (blocking)."""
@@ -113,10 +134,12 @@ class HotkeyDaemon:
             return
 
         self._running = True
-        print(f"[hotkeyd] Listening for {self.mode} on {self.trigger_key} "
+        mod_str = f"{self.trigger_key_modifier} + " if self.trigger_key_modifier else ""
+        print(f"[hotkeyd] Listening for {self.mode} on {mod_str}{self.trigger_key} "
               f"(code={self.key_code})")
         if self.key_code_2 is not None:
-            print(f"[hotkeyd] Second PTT key: {self.trigger_key_2} "
+            mod2_str = f"{self.trigger_key_2_modifier} + " if self.trigger_key_2_modifier else ""
+            print(f"[hotkeyd] Second PTT key: {mod2_str}{self.trigger_key_2} "
                   f"(code={self.key_code_2}, lang={self.trigger_key_2_lang})")
         print(f"[hotkeyd] IPC target: {self.socket_path}")
 
@@ -173,6 +196,19 @@ class HotkeyDaemon:
             tasks = [self._monitor_device(kb) for kb in key_devices]
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    def _update_modifier_state(self, event_code: int, event_value: int):
+        """Track modifier key held state across all devices."""
+        if event_value == 1:  # key down
+            self._modifier_held.add(event_code)
+        elif event_value == 0:  # key up
+            self._modifier_held.discard(event_code)
+
+    def _modifier_active(self, modifier_code: Optional[int]) -> bool:
+        """Check if a modifier key is currently held (or no modifier required)."""
+        if modifier_code is None:
+            return True
+        return modifier_code in self._modifier_held
+
     async def _monitor_device(self, device):
         """Monitor a single input device for the trigger pattern."""
         import evdev
@@ -184,12 +220,19 @@ class HotkeyDaemon:
                 if event.type != evdev.ecodes.EV_KEY:
                     continue
 
+                # Track modifier state for all modifier keys we care about
+                self._update_modifier_state(event.code, event.value)
+
                 # Second trigger key (always PTT mode)
                 if self.key_code_2 is not None and event.code == self.key_code_2:
-                    self._handle_ptt_2(event.value)
+                    if self._modifier_active(self.modifier_code_2):
+                        self._handle_ptt_2(event.value)
                     continue
 
                 if event.code != self.key_code:
+                    continue
+
+                if not self._modifier_active(self.modifier_code):
                     continue
 
                 if self.mode == "double_tap":
@@ -237,14 +280,24 @@ class HotkeyDaemon:
                 if not self._running:
                     break
                 if event.type == evdev.ecodes.EV_KEY:
-                    # Primary trigger key: consume (don't forward), handle PTT
+                    # Track modifier state
+                    self._update_modifier_state(event.code, event.value)
+
+                    # Primary trigger key
                     if event.code == self.key_code:
-                        self._handle_ptt(event.value)
-                        continue
-                    # Second trigger key: consume, handle PTT with prompt
-                    if self.key_code_2 is not None and event.code == self.key_code_2:
-                        self._handle_ptt_2(event.value)
-                        continue
+                        if self._modifier_active(self.modifier_code):
+                            # Modifier held: consume key, handle PTT
+                            self._handle_ptt(event.value)
+                            continue
+                        # No modifier (or modifier not held): forward normally
+                        # so PgDn/PgUp work as expected
+                    # Second trigger key
+                    elif self.key_code_2 is not None and event.code == self.key_code_2:
+                        if self._modifier_active(self.modifier_code_2):
+                            # Modifier held: consume key, handle PTT
+                            self._handle_ptt_2(event.value)
+                            continue
+                        # No modifier: forward normally
                 # Everything else: forward to virtual device as-is.
                 # Do NOT inject extra SYN_REPORT — let the original
                 # SYN events flow through to preserve multi-axis frame
@@ -336,7 +389,9 @@ class HotkeyDaemon:
 def run_hotkey_daemon(cfg=None):
     """Start the hotkey daemon using config values (or defaults)."""
     trigger_key = "KEY_CAPSLOCK"
+    trigger_key_modifier = ""
     trigger_key_2 = ""
+    trigger_key_2_modifier = ""
     trigger_key_2_lang = "hu"
     mode = "double_tap"
     double_tap_window_ms = 350
@@ -345,7 +400,9 @@ def run_hotkey_daemon(cfg=None):
 
     if cfg is not None:
         trigger_key = cfg.data.get("hotkey_trigger_key", trigger_key)
+        trigger_key_modifier = cfg.data.get("hotkey_trigger_key_modifier", trigger_key_modifier)
         trigger_key_2 = cfg.data.get("hotkey_trigger_key_2", trigger_key_2)
+        trigger_key_2_modifier = cfg.data.get("hotkey_trigger_key_2_modifier", trigger_key_2_modifier)
         trigger_key_2_lang = cfg.data.get("hotkey_trigger_key_2_lang", trigger_key_2_lang)
         mode = cfg.data.get("hotkey_mode", mode)
         double_tap_window_ms = int(cfg.data.get("hotkey_double_tap_window_ms", double_tap_window_ms))
@@ -354,7 +411,9 @@ def run_hotkey_daemon(cfg=None):
 
     daemon = HotkeyDaemon(
         trigger_key=trigger_key,
+        trigger_key_modifier=trigger_key_modifier,
         trigger_key_2=trigger_key_2,
+        trigger_key_2_modifier=trigger_key_2_modifier,
         trigger_key_2_lang=trigger_key_2_lang,
         mode=mode,
         double_tap_window_ms=double_tap_window_ms,
