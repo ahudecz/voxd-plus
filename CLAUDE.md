@@ -110,4 +110,4 @@ Tests use pytest with fixtures that:
 
 ## Hardware Context
 
-Development machine: Ryzen 9 9900X3D, 128GB RAM, dual RTX 5060 Ti (Blackwell architecture, compute_120). CUDA builds use sm_89 for forward compatibility.
+Development machine: TUXEDO InfinityBook Pro AMD Gen10 laptop, AMD Ryzen AI 9 365 (20 threads), 64 GiB RAM, AMD Radeon 890M integrated GPU (no discrete GPU, no CUDA). KDE Plasma 6.5.2 on Wayland.

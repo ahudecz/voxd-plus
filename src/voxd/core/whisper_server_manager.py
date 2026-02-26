@@ -105,6 +105,16 @@ class WhisperServerManager:
                 preexec_fn=os.setsid,
             )
 
+            # Pin whisper-server to the first half of CPU cores so it
+            # doesn't compete with other heavy processes (e.g. Claude Code).
+            try:
+                cpu_count = os.cpu_count() or 4
+                half = max(2, cpu_count // 2)
+                os.sched_setaffinity(self._process.pid, set(range(half)))
+                verbo(f"[whisper-server] Pinned to cores 0-{half - 1}")
+            except (OSError, AttributeError):
+                pass  # sched_setaffinity not available on all platforms
+
             start_time = time.time()
             while time.time() - start_time < self._startup_timeout:
                 if self.is_server_running():
