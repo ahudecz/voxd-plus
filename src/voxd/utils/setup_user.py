@@ -500,6 +500,48 @@ def _install_desktop_launchers() -> None:
         pass
 
 
+def _install_autostart_entries() -> None:
+    """Create XDG autostart entries for tray and hotkey daemon."""
+    autostart_dir = Path.home() / ".config" / "autostart"
+    _ensure_dir(autostart_dir)
+
+    wrapper = shutil.which("voxd-plus") or "/usr/bin/voxd-plus"
+
+    entries = {
+        "voxd-plus-tray.desktop": {
+            "Name": "VOXD-Plus Tray",
+            "Comment": "VOXD-Plus system tray with whisper-server and IPC",
+            "Exec": f"bash -c 'export YDOTOOL_SOCKET=\"$HOME/.ydotool_socket\"; {wrapper} --tray'",
+            "Delay": "3",
+        },
+        "voxd-plus-hotkeyd.desktop": {
+            "Name": "VOXD-Plus Hotkey Daemon",
+            "Comment": "Global PTT hotkey listener for VOXD-Plus",
+            "Exec": f"bash -c 'export YDOTOOL_SOCKET=\"$HOME/.ydotool_socket\"; {wrapper} --hotkeyd'",
+            "Delay": "5",
+        },
+    }
+
+    for filename, meta in entries.items():
+        path = autostart_dir / filename
+        try:
+            path.write_text(
+                "[Desktop Entry]\n"
+                "Type=Application\n"
+                f"Name={meta['Name']}\n"
+                f"Exec={meta['Exec']}\n"
+                "Icon=voxd-plus\n"
+                "Terminal=false\n"
+                "Categories=Utility;\n"
+                "X-GNOME-Autostart-enabled=true\n"
+                f"X-GNOME-Autostart-Delay={meta['Delay']}\n"
+                f"Comment={meta['Comment']}\n"
+            )
+            print(f"[setup] Autostart: {filename}")
+        except Exception as e:
+            print(f"[setup] Autostart {filename} failed: {e}")
+
+
 def run_user_setup(verbose: bool = False) -> None:
     # Create config if needed and load
     cfg = AppConfig()
@@ -538,6 +580,8 @@ def run_user_setup(verbose: bool = False) -> None:
         pass
     # Install desktop entries and icons
     _install_desktop_launchers()
+    # Install autostart entries for tray and hotkey daemon
+    _install_autostart_entries()
     # Ensure whisper paths are resolved (AppConfig does this on save)
     try:
         cfg.save()
