@@ -150,6 +150,12 @@ class WhisperTranscriber:
         to subprocess.
         """
         try:
+            # Use Groq cloud whisper if API key is available
+            if os.environ.get("GROQ_API_KEY", ""):
+                result = self._transcribe_via_groq(audio_file)
+                if result is not None:
+                    return result
+
             from voxd.core.whisper_server_manager import get_whisper_server_manager
             mgr = get_whisper_server_manager()
 
@@ -182,6 +188,69 @@ class WhisperTranscriber:
             return None
         except Exception as e:
             verr(f"[transcriber] Server transcription failed: {e}")
+            return None
+
+    def _transcribe_via_groq(self, audio_file: Path):
+        """Transcribe audio via Groq cloud whisper-large-v3 API.
+
+        Returns (text, original_text) tuple on success, or None to fall back.
+        """
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        if not api_key:
+            return None
+
+        try:
+            import requests
+
+            whisper_prompt = (self.cfg.data.get("whisper_prompt", "") if self.cfg else "").strip()
+            key2_prompt = (self.cfg.data.get("hotkey_trigger_key_2_whisper_prompt", "") if self.cfg else "").strip()
+            prompt = key2_prompt or whisper_prompt
+
+            # Translations endpoint always outputs English; transcriptions for other langs
+            if self.language == "en":
+                endpoint = "https://api.groq.com/openai/v1/audio/translations"
+            else:
+                endpoint = "https://api.groq.com/openai/v1/audio/transcriptions"
+
+            with open(audio_file, "rb") as f:
+                files = {"file": (audio_file.name, f, "audio/wav")}
+                data = {
+                    "model": "whisper-large-v3",
+                    "response_format": "text",
+                }
+                if self.language != "en":
+                    data["language"] = self.language
+                if prompt:
+                    data["prompt"] = prompt
+
+                response = requests.post(
+                    endpoint,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    files=files,
+                    data=data,
+                    timeout=30,
+                )
+
+            if response.status_code != 200:
+                verr(f"[transcriber] Groq API error {response.status_code}: {response.text[:200]}")
+                return None
+
+            text = response.text.strip()
+            verbo(f"[transcriber] Groq transcription: '{text[:80]}...'")
+
+            if self.delete_input:
+                try:
+                    audio_file.unlink()
+                except Exception:
+                    pass
+
+            tscript = re.sub(r"\[\d{2}:\d{2}[\.:]\d{3}\]|\(\d{2}:\d{2}\)", "", text)
+            tscript = re.sub(r"\s+", " ", tscript).strip()
+
+            return tscript, text
+
+        except Exception as e:
+            verr(f"[transcriber] Groq transcription failed: {e}")
             return None
 
     def _parse_transcript(self, path: Path):
