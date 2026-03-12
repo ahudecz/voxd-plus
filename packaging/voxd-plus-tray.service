@@ -8,6 +8,7 @@ ExecStart=/usr/bin/voxd-plus --tray
 Restart=on-failure
 RestartSec=2s
 Environment=YDOTOOL_SOCKET=%h/.ydotool_socket
+EnvironmentFile=-%h/.config/voxd-plus/env
 
 [Install]
 WantedBy=default.target

@@ -118,15 +118,20 @@ class AudioRecorder:
 
         verbo("[recorder] Stopping recording...")
 
-        # Stop the stream FIRST while is_recording is still True so
-        # in-flight audio callbacks can still buffer data.  stream.stop()
-        # waits for the current sounddevice block to finish, which
-        # handles the flush — no extra sleep needed.
-        if hasattr(self, 'stream') and self.stream is not None:
-            self.stream.stop()
-            self.stream.close()
-
+        # Signal the callback to stop doing work immediately, so
+        # stream.abort() doesn't deadlock waiting for a callback
+        # that is blocked on the GIL (held by a transcription thread).
         self.is_recording = False
+
+        if hasattr(self, 'stream') and self.stream is not None:
+            try:
+                self.stream.abort()  # abort() terminates immediately, stop() waits for callbacks
+            except Exception:
+                pass
+            try:
+                self.stream.close()
+            except Exception:
+                pass
 
         # Emit remaining streaming buffer before clearing (streaming mode only)
         if hasattr(self, 'streaming_buffer') and self.streaming_buffer:

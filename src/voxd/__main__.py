@@ -194,7 +194,8 @@ def _ensure_voxd_tray_unit() -> None:
                 "ExecStart=/usr/bin/voxd-plus --tray\n"
                 "Restart=on-failure\n"
                 "RestartSec=2s\n"
-                "Environment=YDOTOOL_SOCKET=%h/.ydotool_socket\n\n"
+                "Environment=YDOTOOL_SOCKET=%h/.ydotool_socket\n"
+                "EnvironmentFile=-%h/.config/voxd-plus/env\n\n"
                 "[Install]\n"
                 "WantedBy=default.target\n"
             )
@@ -304,6 +305,87 @@ def _handle_autostart(arg_value: str) -> int:
         print(f"[autostart] disabled (enabled={enabled}, active={active})")
     return 0
 
+def _handle_restart():
+    """Kill all running VOXD processes and start fresh tray + hotkeyd."""
+    import signal
+    import time
+
+    my_pid = os.getpid()
+    python = sys.executable
+    # Resolve the voxd module directory for relaunch
+    voxd_dir = Path(__file__).resolve().parent
+
+    # ── Kill existing processes ──────────────────────────────────────────
+    print("[restart] Stopping all VOXD processes...")
+
+    # Precise patterns: whisper-server binary, then any python voxd process
+    kill_patterns = ["whisper-server", "voxd --tray", "voxd --hotkeyd", "voxd --gui", "voxd --flux", "voxd --cli", "voxd --rh"]
+
+    def _kill_matching(sig):
+        for pattern in kill_patterns:
+            try:
+                result = subprocess.run(
+                    ["pgrep", "-f", pattern],
+                    capture_output=True, text=True, timeout=5,
+                )
+                for line in result.stdout.strip().splitlines():
+                    pid = int(line.strip())
+                    if pid == my_pid:
+                        continue
+                    try:
+                        os.kill(pid, sig)
+                    except ProcessLookupError:
+                        pass
+            except Exception:
+                pass
+
+    _kill_matching(signal.SIGTERM)
+    time.sleep(1)
+    _kill_matching(signal.SIGKILL)
+    time.sleep(0.5)
+    print("[restart] All processes stopped.")
+
+    # ── Relaunch tray + hotkeyd ──────────────────────────────────────────
+    # Inherit current env (WAYLAND_DISPLAY, XDG_RUNTIME_DIR, etc.)
+    env = os.environ.copy()
+
+    print("[restart] Starting tray...")
+    subprocess.Popen(
+        [python, "-m", "voxd", "--tray"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        env=env,
+    )
+
+    # Wait for tray to finish config init before starting hotkeyd
+    # to avoid concurrent config writes
+    time.sleep(3)
+
+    print("[restart] Starting hotkey daemon...")
+    subprocess.Popen(
+        [python, "-m", "voxd", "--hotkeyd"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        env=env,
+    )
+
+    time.sleep(2)
+
+    # Verify
+    try:
+        result = subprocess.run(
+            ["pgrep", "-af", "voxd"],
+            capture_output=True, text=True, timeout=5,
+        )
+        running = [l for l in result.stdout.strip().splitlines()
+                   if str(my_pid) not in l and "pgrep" not in l]
+        print(f"[restart] Done. {len(running)} process(es) running.")
+    except Exception:
+        print("[restart] Done.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="VOXD App Entry Point", add_help=False)
     # NOTE: we intentionally disable the automatic -h/--help. Sub-mode parsers
@@ -341,6 +423,11 @@ def main():
         "--trigger-record",
         action="store_true",
         help="(Internal) signal the running VOXD App to start recording - use for system-wide HOTKEY setup"
+    )
+    parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="Kill all running VOXD processes and restart tray + hotkeyd"
     )
     parser.add_argument(
         "--diagnose",
@@ -423,6 +510,10 @@ def main():
     if args.trigger_record:
         from voxd.utils.ipc_client import send_trigger
         send_trigger()
+        sys.exit(0)
+
+    if args.restart:
+        _handle_restart()
         sys.exit(0)
 
     cfg = AppConfig()

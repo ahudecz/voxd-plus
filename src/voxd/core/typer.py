@@ -57,18 +57,20 @@ class SimulatedTyper:
         self.enabled = self._detect_typing_tool()
         
         # Ensure ydotool CLI uses the same user socket as our service.
-        # Probe known locations even if YDOTOOL_SOCKET is set — the env var
-        # may point at a stale path (e.g. ~/.ydotool_socket from .bashrc when
-        # the daemon actually listens on /tmp/.ydotool_socket).
+        # Always probe known locations — the env var may point at a stale
+        # path (e.g. ~/.ydotool_socket set by wrapper when the daemon
+        # actually listens on /tmp/.ydotool_socket).
         if self.enabled and self.tool and os.path.basename(self.tool) == "ydotool":
             current = os.environ.get("YDOTOOL_SOCKET", "")
-            if not current or not os.path.exists(current):
-                for candidate in ["/tmp/.ydotool_socket", str(Path.home() / ".ydotool_socket")]:
-                    if os.path.exists(candidate):
-                        os.environ["YDOTOOL_SOCKET"] = candidate
-                        break
-                else:
-                    os.environ["YDOTOOL_SOCKET"] = "/tmp/.ydotool_socket"
+            # Probe even if current is set — it might not exist on disk
+            found = False
+            for candidate in ["/tmp/.ydotool_socket", str(Path.home() / ".ydotool_socket")]:
+                if os.path.exists(candidate):
+                    os.environ["YDOTOOL_SOCKET"] = candidate
+                    found = True
+                    break
+            if not found:
+                os.environ["YDOTOOL_SOCKET"] = "/tmp/.ydotool_socket"
         
         # Check daemon status for ydotool and attempt auto-start if needed
         if self.enabled and not self._check_ydotool_daemon():
@@ -460,9 +462,7 @@ class SimulatedTyper:
                     timeout=5
                 )
             elif "ydotool" in tool_name:
-                # Use Shift+Insert for paste — works for both Ctrl+V and
-                # Ctrl+Shift+V targets and is compatible with all ydotool versions.
-                subprocess.run(["ydotool", "key", "shift+insert"],
+                subprocess.run(["ydotool", "key", paste_keys],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                timeout=5)
             else:

@@ -181,16 +181,26 @@ class HotkeyDaemon:
         if self.key_code_2 is not None:
             _grab_codes.add(self.key_code_2)
 
+        # Device names that should never be grabbed — grabbing these
+        # corrupts key routing or breaks ydotool injection.
+        _no_grab = {"ydotoold", "voxd-proxy", "mouse", "touchpad"}
+
         if self.mode == "ptt" and self.suppress_original:
             tasks = []
             for dev in key_devices:
+                dev_lower = dev.name.lower()
                 caps = dev.capabilities(verbose=False)
                 key_caps = caps.get(1, [])  # EV_KEY codes
-                if _grab_codes & set(key_caps):
+                skip = any(pat in dev_lower for pat in _no_grab)
+                if not skip and (_grab_codes & set(key_caps)):
                     tasks.append(self._monitor_device_ptt_grab(dev))
                 else:
-                    verbo(f"[hotkeyd] Skipping grab for {dev.name} "
-                          f"(no trigger keycodes)")
+                    if skip:
+                        verbo(f"[hotkeyd] Skipping grab for {dev.name} "
+                              f"(excluded device)")
+                    else:
+                        verbo(f"[hotkeyd] Skipping grab for {dev.name} "
+                              f"(no trigger keycodes)")
                     tasks.append(self._monitor_device(dev))
         else:
             tasks = [self._monitor_device(kb) for kb in key_devices]

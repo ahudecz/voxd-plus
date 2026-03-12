@@ -500,8 +500,24 @@ def _install_desktop_launchers() -> None:
         pass
 
 
+def _systemd_unit_enabled(unit: str) -> bool:
+    """Check if a systemd --user unit is enabled."""
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "is-enabled", unit],
+            capture_output=True, timeout=5,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def _install_autostart_entries() -> None:
-    """Create XDG autostart entries for tray and hotkey daemon."""
+    """Create XDG autostart entries for tray and hotkey daemon.
+
+    Skips entries whose corresponding systemd user service is already
+    enabled to avoid launching duplicate processes at login.
+    """
     autostart_dir = Path.home() / ".config" / "autostart"
     _ensure_dir(autostart_dir)
 
@@ -513,17 +529,31 @@ def _install_autostart_entries() -> None:
             "Comment": "VOXD-Plus system tray with whisper-server and IPC",
             "Exec": f"bash -c 'export YDOTOOL_SOCKET=\"$HOME/.ydotool_socket\"; {wrapper} --tray'",
             "Delay": "3",
+            "systemd_unit": "voxd-plus-tray.service",
         },
         "voxd-plus-hotkeyd.desktop": {
             "Name": "VOXD-Plus Hotkey Daemon",
             "Comment": "Global PTT hotkey listener for VOXD-Plus",
             "Exec": f"bash -c 'export YDOTOOL_SOCKET=\"$HOME/.ydotool_socket\"; {wrapper} --hotkeyd'",
             "Delay": "5",
+            "systemd_unit": "voxd-plus-hotkeyd.service",
         },
     }
 
     for filename, meta in entries.items():
         path = autostart_dir / filename
+        unit = meta.get("systemd_unit", "")
+        if unit and _systemd_unit_enabled(unit):
+            # Systemd already manages this; remove stale XDG entry if present
+            if path.exists():
+                try:
+                    path.unlink()
+                    print(f"[setup] Autostart: removed {filename} (systemd unit active)")
+                except Exception:
+                    pass
+            else:
+                print(f"[setup] Autostart: skipped {filename} (systemd unit active)")
+            continue
         try:
             path.write_text(
                 "[Desktop Entry]\n"
@@ -540,6 +570,33 @@ def _install_autostart_entries() -> None:
             print(f"[setup] Autostart: {filename}")
         except Exception as e:
             print(f"[setup] Autostart {filename} failed: {e}")
+
+
+def _write_env_file() -> None:
+    """Write API keys from current environment to env file for systemd service."""
+    env_path = Path.home() / ".config" / "voxd-plus" / "env"
+    _ensure_dir(env_path.parent)
+
+    api_keys = [
+        "GROQ_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+        "XAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
+        "OPENROUTER_API_KEY",
+    ]
+    lines = []
+    for key in api_keys:
+        val = os.environ.get(key, "")
+        if val:
+            lines.append(f"{key}={val}\n")
+
+    if not lines:
+        return
+
+    try:
+        env_path.write_text("".join(lines))
+        env_path.chmod(0o600)
+        print(f"[setup] API keys written to {env_path} ({len(lines)} key(s))")
+    except Exception as e:
+        print(f"[setup] Failed to write env file: {e}")
 
 
 def run_user_setup(verbose: bool = False) -> None:
@@ -582,6 +639,8 @@ def run_user_setup(verbose: bool = False) -> None:
     _install_desktop_launchers()
     # Install autostart entries for tray and hotkey daemon
     _install_autostart_entries()
+    # Write API keys to env file for systemd service
+    _write_env_file()
     # Ensure whisper paths are resolved (AppConfig does this on save)
     try:
         cfg.save()

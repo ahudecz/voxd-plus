@@ -496,6 +496,7 @@ class AppConfig:
         if "aipp_selected_models" not in self.data:
             self.data["aipp_selected_models"] = {}
             
+        changed = False
         for provider in ["llamacpp_server"]:
             current_selected = self.data["aipp_selected_models"].get(provider, "")
             if current_selected not in available_models:
@@ -504,8 +505,10 @@ class AppConfig:
                     self.data["aipp_selected_models"][provider] = available_models[0]
                 else:
                     self.data["aipp_selected_models"][provider] = "qwen2.5-3b-instruct-q4_k_m"
-        
-        self.save()
+                changed = True
+
+        if changed:
+            self.save()
 
     def validate_llamacpp_setup(self) -> dict[str, bool]:
         """Check llama.cpp installation status."""
