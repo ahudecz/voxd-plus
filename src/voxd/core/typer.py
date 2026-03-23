@@ -462,7 +462,9 @@ class SimulatedTyper:
                     timeout=5
                 )
             elif "ydotool" in tool_name:
-                subprocess.run(["ydotool", "key", paste_keys],
+                # Use Shift+Insert for paste — works for both Ctrl+V and
+                # Ctrl+Shift+V targets and is compatible with all ydotool versions.
+                subprocess.run(["ydotool", "key", "shift+insert"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                timeout=5)
             else:

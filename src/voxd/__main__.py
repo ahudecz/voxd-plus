@@ -310,6 +310,7 @@ def _handle_restart():
     import signal
     import time
 
+    _load_env_file()  # ensure API keys are available for relaunched processes
     my_pid = os.getpid()
     python = sys.executable
     # Resolve the voxd module directory for relaunch
@@ -386,7 +387,34 @@ def _handle_restart():
         print("[restart] Done.")
 
 
+def _load_env_file():
+    """Load KEY=VALUE pairs from ~/.config/voxd-plus/env into os.environ.
+
+    Only sets variables that are not already present in the environment,
+    so explicit env vars (e.g. from a shell) take precedence.
+    Mirrors the systemd EnvironmentFile= directive already in the unit file.
+    """
+    env_file = Path.home() / ".config" / "voxd-plus" / "env"
+    if not env_file.exists():
+        return
+    try:
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip("'\"")
+            if key and key not in os.environ:
+                os.environ[key] = value
+    except Exception:
+        pass
+
+
 def main():
+    _load_env_file()
     parser = argparse.ArgumentParser(description="VOXD App Entry Point", add_help=False)
     # NOTE: we intentionally disable the automatic -h/--help. Sub-mode parsers
     # (and the CLI quick-actions parser) should receive -h/--help when relevant.

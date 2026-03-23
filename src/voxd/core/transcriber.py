@@ -150,7 +150,7 @@ class WhisperTranscriber:
         to subprocess.
         """
         try:
-            # Use Groq cloud whisper if API key is available
+            # Groq cloud whisper-large-v3 (primary when API key available)
             if os.environ.get("GROQ_API_KEY", ""):
                 result = self._transcribe_via_groq(audio_file)
                 if result is not None:
@@ -203,23 +203,24 @@ class WhisperTranscriber:
             import requests
 
             whisper_prompt = (self.cfg.data.get("whisper_prompt", "") if self.cfg else "").strip()
-            key2_prompt = (self.cfg.data.get("hotkey_trigger_key_2_whisper_prompt", "") if self.cfg else "").strip()
-            prompt = key2_prompt or whisper_prompt
 
-            # Translations endpoint always outputs English; transcriptions for other langs
-            if self.language == "en":
-                endpoint = "https://api.groq.com/openai/v1/audio/translations"
+            # Only use key2's prompt when the active language matches key2's language
+            key2_lang = (self.cfg.data.get("hotkey_trigger_key_2_lang", "") if self.cfg else "").strip()
+            if key2_lang and key2_lang == self.language:
+                key2_prompt = (self.cfg.data.get("hotkey_trigger_key_2_whisper_prompt", "") if self.cfg else "").strip()
+                prompt = key2_prompt or whisper_prompt
             else:
-                endpoint = "https://api.groq.com/openai/v1/audio/transcriptions"
+                prompt = whisper_prompt
+
+            endpoint = "https://api.groq.com/openai/v1/audio/transcriptions"
 
             with open(audio_file, "rb") as f:
                 files = {"file": (audio_file.name, f, "audio/wav")}
                 data = {
                     "model": "whisper-large-v3",
                     "response_format": "text",
+                    "language": self.language,
                 }
-                if self.language != "en":
-                    data["language"] = self.language
                 if prompt:
                     data["prompt"] = prompt
 
@@ -236,6 +237,14 @@ class WhisperTranscriber:
                 return None
 
             text = response.text.strip()
+            if not text:
+                return None
+
+            # Hallucination guard: detect wrong-language output
+            if self._is_hallucination(text):
+                verr(f"[transcriber] Groq hallucination detected, discarding: '{text[:80]}'")
+                return None
+
             verbo(f"[transcriber] Groq transcription: '{text[:80]}...'")
 
             if self.delete_input:
@@ -252,6 +261,36 @@ class WhisperTranscriber:
         except Exception as e:
             verr(f"[transcriber] Groq transcription failed: {e}")
             return None
+
+    # Known Whisper hallucination phrases (lowercased substrings)
+    _HALLUCINATION_PHRASES = [
+        "kérlek, írd le, amit mondok",
+        "kérlek, pontosan írd le",
+        "thank you for watching",
+        "thanks for watching",
+        "please subscribe",
+        "like and subscribe",
+        "sottotitoli creati dalla comunità",  # Italian subtitle hallucination
+        "sous-titres réalisés",               # French subtitle hallucination
+        "untertitel der amara",               # German subtitle hallucination
+    ]
+
+    def _is_hallucination(self, text: str) -> bool:
+        """Detect known Whisper hallucination patterns."""
+        lower = text.strip().lower()
+
+        # Check known hallucination phrases
+        for phrase in self._HALLUCINATION_PHRASES:
+            if phrase in lower:
+                return True
+
+        # If expecting English but output has high non-ASCII ratio → likely wrong language
+        if self.language == "en" and len(lower) > 5:
+            non_ascii = sum(1 for c in lower if ord(c) > 127)
+            if non_ascii / len(lower) > 0.15:
+                return True
+
+        return False
 
     def _parse_transcript(self, path: Path):
         try:
