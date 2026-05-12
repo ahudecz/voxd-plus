@@ -96,6 +96,8 @@ class WhisperTranscriber:
 
         # Whisper vocabulary hints (--prompt)
         whisper_prompt = (self.cfg.data.get("whisper_prompt", "") if self.cfg else "").strip()
+        if not whisper_prompt and self.language == "en":
+            whisper_prompt = "Hello, this is an English dictation."
         if whisper_prompt:
             cmd.extend(["--prompt", whisper_prompt])
 
@@ -164,6 +166,8 @@ class WhisperTranscriber:
                 return None
 
             whisper_prompt = (self.cfg.data.get("whisper_prompt", "") if self.cfg else "").strip()
+            if not whisper_prompt and self.language == "en":
+                whisper_prompt = "Hello, this is an English dictation."
             text = mgr.transcribe(str(audio_file), language=self.language, prompt=whisper_prompt)
             if text is None:
                 return None
@@ -211,6 +215,12 @@ class WhisperTranscriber:
                 prompt = key2_prompt or whisper_prompt
             else:
                 prompt = whisper_prompt
+
+            # Default English conditioning prompt — anchors Whisper to English
+            # output and prevents hallucinations in other languages on
+            # ambiguous/silent audio.
+            if not prompt and self.language == "en":
+                prompt = "Hello, this is an English dictation."
 
             endpoint = "https://api.groq.com/openai/v1/audio/transcriptions"
 
@@ -266,6 +276,8 @@ class WhisperTranscriber:
     _HALLUCINATION_PHRASES = [
         "kérlek, írd le, amit mondok",
         "kérlek, pontosan írd le",
+        "köszönöm a figyelmet",
+        "feliratkozás",
         "thank you for watching",
         "thanks for watching",
         "please subscribe",
@@ -273,6 +285,17 @@ class WhisperTranscriber:
         "sottotitoli creati dalla comunità",  # Italian subtitle hallucination
         "sous-titres réalisés",               # French subtitle hallucination
         "untertitel der amara",               # German subtitle hallucination
+    ]
+
+    # Common Hungarian words that appear in Whisper hallucinations.
+    # Matched when expecting English — if >=2 are found the output is likely
+    # Hungarian, not English.  All pure-ASCII so the non-ASCII ratio check
+    # alone would miss them.
+    _HUNGARIAN_MARKER_WORDS = [
+        "egy", "nem", "hogy", "amit", "csak", "meg", "van", "ezt",
+        "azt", "igen", "vagy", "mint", "volt", "lesz", "lehet",
+        "mondok", "nagyon", "minden", "akkor", "igen", "pedig",
+        "vagyok", "mondta", "kell", "tudja", "ilyen", "olyan",
     ]
 
     def _is_hallucination(self, text: str) -> bool:
@@ -284,10 +307,18 @@ class WhisperTranscriber:
             if phrase in lower:
                 return True
 
-        # If expecting English but output has high non-ASCII ratio → likely wrong language
         if self.language == "en" and len(lower) > 5:
+            # Non-ASCII ratio check (catches most non-Latin scripts)
             non_ascii = sum(1 for c in lower if ord(c) > 127)
             if non_ascii / len(lower) > 0.15:
+                return True
+
+            # Hungarian word-frequency check — Hungarian uses Latin alphabet
+            # so non-ASCII ratio alone misses it.  Count distinct marker words
+            # present; >=2 in a short text is almost certainly not English.
+            words = set(re.findall(r"\b[a-záéíóöőúüű]+\b", lower))
+            hu_hits = sum(1 for w in self._HUNGARIAN_MARKER_WORDS if w in words)
+            if hu_hits >= 2:
                 return True
 
         return False
