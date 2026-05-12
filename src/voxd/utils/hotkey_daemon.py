@@ -13,7 +13,6 @@ Usage:
 
 import asyncio
 import os
-import socket
 import time
 from pathlib import Path
 from typing import Optional
@@ -268,7 +267,19 @@ class HotkeyDaemon:
         import evdev
 
         try:
-            ui = evdev.UInput.from_device(device, name=f"voxd-proxy-{device.name}")
+            # Preserve the original device's bus type and version so the
+            # compositor (KWin) categorises the proxy identically to the
+            # real keyboard (e.g. PS/2 internal vs USB external).  A
+            # mismatch can cause different XKB handling and dropped keys.
+            ui = evdev.UInput.from_device(
+                device,
+                name=f"voxd-proxy-{device.name}",
+                bustype=device.info.bustype,
+                vendor=device.info.vendor,
+                product=device.info.product,
+                version=device.info.version,
+                phys=device.phys or "py-evdev-uinput",
+            )
         except Exception as e:
             verr(f"[hotkeyd] Cannot create UInput proxy for {device.name}: {e} — "
                  "falling back to non-grab mode")
@@ -351,39 +362,48 @@ class HotkeyDaemon:
     def _handle_ptt(self, value: int):
         """Push-to-talk: key-down starts recording, key-up stops recording."""
         if value == 1:  # key down
-            self._send_ipc(b"start_record")
+            self._schedule_ipc(b"start_record")
             verbo("[hotkeyd] PTT key down — start_record sent")
         elif value == 0:  # key up
-            self._send_ipc(b"stop_record")
+            self._schedule_ipc(b"stop_record")
             verbo("[hotkeyd] PTT key up — stop_record sent")
 
     def _handle_ptt_2(self, value: int):
         """Push-to-talk for second key: sends lang-tagged IPC commands."""
         lang = self.trigger_key_2_lang
         if value == 1:  # key down
-            self._send_ipc(f"start_record:{lang}".encode())
+            self._schedule_ipc(f"start_record:{lang}".encode())
             verbo(f"[hotkeyd] PTT key2 down — start_record:{lang} sent")
         elif value == 0:  # key up
-            self._send_ipc(f"stop_record:{lang}".encode())
+            self._schedule_ipc(f"stop_record:{lang}".encode())
             verbo(f"[hotkeyd] PTT key2 up — stop_record:{lang} sent")
 
     def _fire_trigger(self):
         """Send trigger_record to VOXD's IPC socket."""
-        self._send_ipc(b"trigger_record")
+        self._schedule_ipc(b"trigger_record")
         verbo("[hotkeyd] Trigger sent!")
 
-    def _send_ipc(self, command: bytes):
-        """Send a command to VOXD's IPC socket."""
+    def _schedule_ipc(self, command: bytes):
+        """Schedule an async IPC send without blocking the event loop."""
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._send_ipc_async(command))
+
+    async def _send_ipc_async(self, command: bytes):
+        """Send a command to VOXD's IPC socket without blocking event forwarding."""
         try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(1.0)
-            sock.connect(self.socket_path)
-            sock.sendall(command)
-            sock.close()
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_unix_connection(self.socket_path), timeout=1.0
+            )
+            writer.write(command)
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
         except ConnectionRefusedError:
             verbo("[hotkeyd] VOXD not running (connection refused)")
         except FileNotFoundError:
             verbo("[hotkeyd] VOXD socket not found — is VOXD running?")
+        except asyncio.TimeoutError:
+            verbo("[hotkeyd] VOXD IPC connection timed out")
         except Exception as e:
             verr(f"[hotkeyd] Failed to send command: {e}")
 
